@@ -1,588 +1,1030 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="ar" dir="rtl" data-lang="ar">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LuP — العربي للعربي</title>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Podlup — حوّل بودكاستك إلى محتوى فيروسي</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='18' fill='%23F5F0E8'/><path d='M20 48V24.5C20 16.5 26.5 11 34.6 11C43 11 50 17.4 50 26C50 34.6 43 41 34.6 41H28.8' stroke='%2338433F' stroke-width='7.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/><path d='M28.8 41C23.5 41 20 37.2 20 32' stroke='%235E716A' stroke-width='7.5' stroke-linecap='round' fill='none'/><circle cx='35' cy='26' r='7.2' fill='%23FF5A2A'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-*{box-sizing:border-box;margin:0;padding:0;}
+/* ── TOKENS ── */
 :root{
-  --bg:#07070C;--surface:#0C0C14;--card:#10101A;--border:#1C1C2E;
-  --gold:#C9A84C;--goldL:#F0D472;--goldD:#6A5828;
-  --text:#F0EDE6;--muted:#68656A;--dim:#22222E;
-  --green:#4EC87A;--red:#E05050;--blue:#4A8EF0;
+  --ivory:#F5F0E8;--ivory-dark:#EDE6D8;
+  --forest:#38433F;--forest-mid:#5E716A;--forest-light:#9EA9A5;
+  --orange:#FF5A2A;--orange-light:#FF7A4A;--orange-pale:#FFF1EA;
+  --border:rgba(56,67,63,.12);--border-strong:rgba(56,67,63,.25);
+  --white:#FFFFFF;
 }
+/* ── RESET ── */
+*{margin:0;padding:0;box-sizing:border-box;}
 html{scroll-behavior:smooth;}
-body{background:var(--bg);color:var(--text);font-family:'Tajawal',sans-serif;overflow-x:hidden;}
-::-webkit-scrollbar{width:3px;}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px;}
+body{background:var(--ivory);color:var(--forest);font-family:'Tajawal',sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+::-webkit-scrollbar{width:2px;}::-webkit-scrollbar-thumb{background:var(--forest-light);}
 
-/* ANIMATIONS */
-@keyframes fadeUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
-@keyframes shimmer{0%{background-position:200% center}100%{background-position:-200% center}}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes spinRev{to{transform:rotate(-360deg)}}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
-@keyframes scan{from{left:-80%}to{left:140%}}
-@keyframes waveBar{0%,100%{height:4px}50%{height:100%}}
-@keyframes glowPulse{0%,100%{box-shadow:0 0 16px #C9A84C20}50%{box-shadow:0 0 40px #C9A84C50,0 0 70px #C9A84C15}}
-@keyframes countUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+/* ── BILINGUAL ── */
+.en{display:none;}
+.ar{display:revert;}
+[data-lang="en"]{direction:ltr;font-family:'Inter',sans-serif;}
+[data-lang="en"] .en{display:revert;}
+[data-lang="en"] .ar{display:none;}
+[data-lang="ar"] .en{display:none;}
+[data-lang="ar"] .ar{display:revert;}
 
-/* PARTICLES CANVAS */
-#particles{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;}
+/* ── LANG BTN ── */
+.lang-btn{
+  position:fixed;bottom:80px;right:20px;z-index:999;
+  background:var(--forest);color:var(--ivory);
+  border:none;border-radius:100px;padding:9px 16px;
+  font-size:12px;font-weight:700;cursor:pointer;letter-spacing:1px;
+  transition:all .2s;font-family:'Inter',sans-serif;
+}
+.lang-btn:hover{background:var(--orange);}
+@media(min-width:769px){.lang-btn{bottom:24px;right:24px;}}
 
-/* AMBIENT */
-.ambient{position:fixed;inset:0;pointer-events:none;z-index:0;}
-.ambient-glow{position:absolute;top:-20%;left:50%;transform:translateX(-50%);width:80vw;height:60vh;background:radial-gradient(ellipse,#C9A84C0A 0%,transparent 65%);}
-.grid-bg{position:absolute;inset:0;background-image:linear-gradient(#1C1C2E18 1px,transparent 1px),linear-gradient(90deg,#1C1C2E18 1px,transparent 1px);background-size:64px 64px;-webkit-mask-image:radial-gradient(ellipse 100% 60% at 50% 0%,black,transparent);}
+/* ── NAV ── */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  height:64px;padding:0 clamp(20px,5vw,60px);
+  display:flex;align-items:center;justify-content:space-between;
+  transition:all .3s;
+}
+nav.solid{background:var(--ivory);border-bottom:1px solid var(--border);}
+.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
+.nav-wordmark{font-size:20px;font-weight:900;letter-spacing:-.5px;font-family:'Inter',sans-serif;line-height:1;}
+.nav-wordmark .pod{color:var(--forest);}
+.nav-wordmark .lup{color:var(--forest);}
+.nav-right{display:flex;align-items:center;gap:6px;}
+.nav-link{color:var(--forest-mid);text-decoration:none;font-size:14px;font-weight:500;padding:8px 14px;border-radius:100px;transition:all .2s;}
+.nav-link:hover{color:var(--forest);background:var(--border);}
+.nav-cta{
+  background:var(--forest);color:var(--ivory);border:none;
+  border-radius:100px;padding:10px 22px;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all .2s;
+  font-family:'Tajawal',sans-serif;
+}
+.nav-cta:hover{background:var(--orange);transform:translateY(-1px);}
+[data-lang="en"] .nav-cta{font-family:'Inter',sans-serif;}
+@media(max-width:768px){.nav-link{display:none;}}
 
-/* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:300;height:62px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;transition:all .35s;}
-nav.scrolled{background:#07070CF2;backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
-.logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
-.logo-box{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--goldL),var(--goldD));display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px;color:var(--bg);animation:glowPulse 3s ease infinite;}
-.logo-text{font-size:18px;font-weight:900;color:var(--text);}
-.logo-text span{color:var(--gold);}
-.logo-star{color:var(--blue);font-size:18px;}
-.nav-links{display:flex;align-items:center;gap:4px;}
-.nav-a{color:var(--muted);text-decoration:none;font-size:13px;padding:6px 12px;border-radius:8px;transition:color .2s;}
-.nav-a:hover{color:var(--gold);}
-.btn-main{background:linear-gradient(135deg,var(--goldL),var(--gold));border:none;border-radius:10px;padding:9px 20px;color:var(--bg);font-size:13px;font-weight:900;cursor:pointer;font-family:'Tajawal',sans-serif;position:relative;overflow:hidden;box-shadow:0 4px 18px #C9A84C35;transition:all .25s;}
-.btn-main::after{content:'';position:absolute;top:0;left:-80%;width:50%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.25),transparent);animation:scan 2.4s ease infinite;}
-.btn-main:hover{transform:translateY(-2px);box-shadow:0 8px 28px #C9A84C50;}
-.btn-ghost{background:transparent;border:1px solid var(--border);border-radius:10px;padding:9px 18px;color:var(--muted);font-size:13px;cursor:pointer;font-family:'Tajawal',sans-serif;transition:all .2s;}
-.btn-ghost:hover{border-color:#C9A84C50;color:var(--gold);}
+/* ── HERO ── */
+.hero{
+  min-height:100svh;display:flex;flex-direction:column;
+  justify-content:center;
+  padding:100px clamp(20px,5vw,60px) 60px;
+  position:relative;overflow:hidden;
+}
+.hero-eyebrow{
+  display:inline-flex;align-items:center;gap:10px;
+  font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;
+  color:var(--orange);margin-bottom:28px;
+}
+.hero-eyebrow::before{content:'';width:24px;height:2px;background:var(--orange);flex-shrink:0;}
+[data-lang="en"] .hero-eyebrow::before{order:-1;}
+.hero-h1{
+  font-size:clamp(56px,11vw,128px);font-weight:900;line-height:.92;
+  letter-spacing:-3px;color:var(--forest);margin-bottom:32px;
+}
+.hero-h1 em{font-style:normal;color:var(--orange);}
+.hero-h1 .light{font-weight:300;color:var(--forest-light);}
+.hero-sub{
+  font-size:clamp(16px,2.2vw,20px);color:var(--forest-mid);
+  line-height:1.65;max-width:500px;margin-bottom:40px;
+}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:56px;}
+.btn-primary{
+  background:var(--forest);color:var(--ivory);border:none;
+  border-radius:100px;padding:14px 32px;
+  font-size:15px;font-weight:700;cursor:pointer;
+  font-family:'Tajawal',sans-serif;
+  transition:all .25s;display:inline-flex;align-items:center;gap:8px;
+}
+.btn-primary:hover{background:var(--orange);transform:translateY(-2px);box-shadow:0 12px 28px rgba(255,90,42,.3);}
+[data-lang="en"] .btn-primary{font-family:'Inter',sans-serif;}
+.btn-ghost{
+  background:transparent;color:var(--forest);
+  border:1.5px solid var(--border-strong);border-radius:100px;
+  padding:13px 26px;font-size:15px;font-weight:600;cursor:pointer;
+  font-family:'Tajawal',sans-serif;transition:all .2s;
+}
+.btn-ghost:hover{background:var(--forest);color:var(--ivory);}
+[data-lang="en"] .btn-ghost{font-family:'Inter',sans-serif;}
+.hero-trust{display:flex;gap:20px;flex-wrap:wrap;}
+.trust-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--forest-light);font-weight:500;}
+.trust-dot{width:5px;height:5px;border-radius:50%;background:var(--orange);flex-shrink:0;}
+/* tape */
+.hero-tape{
+  position:absolute;bottom:0;left:0;right:0;height:120px;
+  overflow:hidden;pointer-events:none;
+}
+.tape-inner{
+  display:flex;white-space:nowrap;
+  animation:tapescroll 18s linear infinite;
+  position:absolute;bottom:20px;
+}
+.tape-inner span{
+  font-size:clamp(72px,12vw,120px);font-weight:900;letter-spacing:-3px;
+  color:transparent;-webkit-text-stroke:1.5px rgba(56,67,63,.1);
+  padding-left:48px;flex-shrink:0;font-family:'Inter',sans-serif;
+}
+@keyframes tapescroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 
-/* HERO */
-.hero{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:110px 20px 60px;text-align:center;}
-.pill{display:inline-flex;align-items:center;gap:8px;background:#C9A84C0C;border:1px solid #C9A84C25;border-radius:20px;padding:6px 18px;margin-bottom:28px;animation:fadeUp .7s ease .1s both;}
-.pill-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);}
-.pill span{font-size:12px;color:var(--gold);font-weight:600;}
-h1{font-size:clamp(36px,6.5vw,70px);font-weight:900;line-height:1.12;margin-bottom:18px;animation:fadeUp .7s ease .2s both;}
-h1 .line1{display:block;color:var(--text);}
-h1 .line2{display:block;background:linear-gradient(135deg,var(--goldL) 0%,var(--gold) 45%,var(--blue) 100%);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 4s linear infinite;}
-h1 .line3{display:block;color:var(--text);font-size:65%;}
-.tw-cursor{display:inline-block;width:2px;height:.85em;background:var(--blue);margin-right:2px;vertical-align:middle;animation:blink 1s step-end infinite;}
-.hero-sub{font-size:clamp(14px,2vw,17px);color:var(--muted);line-height:1.85;max-width:520px;margin-bottom:36px;animation:fadeUp .7s ease .3s both;}
-.hero-sub strong{color:var(--text);}
-.hero-ctas{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-bottom:18px;animation:fadeUp .7s ease .4s both;}
-.trust-badges{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-bottom:52px;animation:fadeUp .7s ease .45s both;}
-.trust-badge{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);}
+/* ── STATS ── */
+.stats-bar{
+  background:var(--forest);
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+}
+.stat-item{
+  padding:clamp(18px,3vw,32px) clamp(20px,3vw,36px);
+  border-right:1px solid rgba(255,255,255,.08);
+}
+[data-lang="ar"] .stat-item{border-right:none;border-left:1px solid rgba(255,255,255,.08);}
+.stat-item:last-child{border:none;}
+.stat-num{
+  font-size:clamp(28px,4vw,44px);font-weight:900;
+  color:var(--ivory);letter-spacing:-1px;line-height:1;margin-bottom:6px;
+  font-family:'Inter',sans-serif;
+}
+.stat-num .accent{color:var(--orange);}
+.stat-lbl{font-size:12px;color:rgba(245,240,232,.45);font-weight:500;letter-spacing:.3px;}
 
-/* DEMO CARD */
-.demo-wrap{position:relative;display:inline-block;animation:fadeUp .8s ease .5s both,float 7s ease infinite 2s;}
-.ring1{position:absolute;inset:-28px;border-radius:50%;border:1px dashed #C9A84C18;animation:spin 20s linear infinite;pointer-events:none;}
-.ring2{position:absolute;inset:-14px;border-radius:50%;border:1px dashed #4A8EF012;animation:spinRev 14s linear infinite;pointer-events:none;}
-.demo-card{background:var(--card);border:1px solid var(--border);border-radius:18px;overflow:hidden;width:340px;box-shadow:0 28px 90px #00000090,0 0 0 1px #C9A84C12;}
-.mac-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:9px 14px;display:flex;align-items:center;gap:8px;}
-.mac-dots{display:flex;gap:5px;}
-.mac-dot{width:8px;height:8px;border-radius:50%;}
-.mac-title{flex:1;text-align:center;font-size:10px;color:var(--muted);}
-.mac-live{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);}
-.wave-section{padding:14px 16px 8px;background:linear-gradient(180deg,var(--surface),var(--card));border-bottom:1px solid var(--border);}
-.wave-label{font-size:10px;color:var(--muted);margin-bottom:8px;}
-.waveform{display:flex;align-items:center;gap:2px;height:42px;}
-.wbar{width:2.5px;border-radius:2px;background:#C9A84CBB;animation:waveBar 1s ease infinite;}
-.wave-times{display:flex;justify-content:space-between;margin-top:5px;}
-.wave-time{font-size:9px;color:var(--muted);font-family:monospace;}
-.wave-status{font-size:9px;color:var(--gold);font-family:monospace;animation:pulse 1.5s ease infinite;}
-.clip-result{padding:14px 16px;transition:all .3s ease;}
-.clip-result.fade{opacity:0;transform:translateY(8px);}
-.clip-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-.clip-label{font-size:10px;color:var(--muted);}
-.score-badge{display:flex;align-items:center;gap:5px;background:#F0D47215;border:1px solid #F0D47235;border-radius:20px;padding:2px 9px;}
-.score-dot{width:5px;height:5px;border-radius:50%;background:var(--goldL);box-shadow:0 0 5px var(--goldL);}
-.score-val{font-size:11px;font-weight:900;color:var(--goldL);}
-.clip-title{font-size:13px;font-weight:800;color:var(--text);line-height:1.5;margin-bottom:8px;min-height:40px;}
-.clip-time{font-size:10px;color:var(--muted);font-family:monospace;margin-bottom:10px;}
-.clip-bottom{display:flex;align-items:center;justify-content:space-between;}
-.platforms{display:flex;gap:4px;}
-.ptag{font-size:9px;font-weight:700;border-radius:4px;padding:2px 6px;border:1px solid;}
-.views{font-size:10px;color:var(--green);font-weight:700;}
-.demo-dots{padding:6px 16px 14px;display:flex;gap:5px;justify-content:center;}
-.ddot{height:5px;border-radius:3px;background:var(--border);transition:all .3s;}
-.ddot.active{background:var(--gold);}
+/* ── SECTION ── */
+.section{padding:clamp(60px,10vw,120px) clamp(20px,5vw,60px);}
+.s-label{
+  font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;
+  color:var(--forest-light);margin-bottom:14px;
+  display:flex;align-items:center;gap:10px;
+}
+.s-label::after{content:'';width:32px;height:1px;background:var(--forest-light);opacity:.4;}
+[data-lang="en"] .s-label::after{order:-1;}
+.s-h2{
+  font-size:clamp(34px,7vw,80px);font-weight:900;letter-spacing:-2px;
+  line-height:.95;color:var(--forest);margin-bottom:clamp(40px,6vw,72px);
+}
+.s-h2 em{font-style:normal;color:var(--orange);}
 
-/* STATS */
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(16px,3vw,40px);margin-top:56px;max-width:600px;width:100%;animation:fadeUp .8s ease .7s both;}
-.stat-item{text-align:center;}
-.stat-val{font-size:clamp(26px,4vw,38px);font-weight:900;line-height:1;background:linear-gradient(135deg,var(--goldL),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
-.stat-label{font-size:11px;color:var(--muted);margin-top:5px;}
+/* ── HOW ── */
+.how-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:2px;background:var(--border);
+}
+.how-card{
+  background:var(--ivory);padding:36px 28px;
+  transition:background .25s,color .25s;cursor:default;
+}
+.how-card:hover{background:var(--forest);}
+.how-card:hover .how-num{color:rgba(245,240,232,.12);}
+.how-card:hover .how-title{color:var(--ivory);}
+.how-card:hover .how-body{color:rgba(245,240,232,.55);}
+.how-card:hover .how-icon-box{background:var(--orange);border-color:var(--orange);}
+.how-num{font-size:72px;font-weight:900;color:var(--ivory-dark);line-height:1;margin-bottom:20px;letter-spacing:-3px;font-family:'Inter',sans-serif;transition:color .25s;}
+.how-icon-box{
+  width:44px;height:44px;border-radius:10px;
+  background:var(--forest);border:1px solid var(--forest);
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;margin-bottom:16px;transition:all .25s;
+}
+.how-title{font-size:17px;font-weight:800;color:var(--forest);margin-bottom:8px;transition:color .25s;}
+.how-body{font-size:13px;color:var(--forest-mid);line-height:1.7;transition:color .25s;}
 
-/* SECTIONS */
-section{position:relative;z-index:1;padding:70px 20px;}
-.section-head{text-align:center;margin-bottom:44px;}
-.section-tag{font-size:11px;color:var(--gold);font-weight:800;letter-spacing:2px;margin-bottom:10px;}
-.section-title{font-size:clamp(22px,4vw,34px);font-weight:900;color:var(--text);margin-bottom:8px;}
-.section-sub{font-size:13px;color:var(--muted);}
+/* ── PRODUCTS ── */
+.products-section{background:var(--forest);}
+.products-section .s-label{color:rgba(245,240,232,.4);}
+.products-section .s-label::after{background:rgba(245,240,232,.2);}
+.products-section .s-h2{color:var(--ivory);}
+.plans-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;}
+/* trial banner */
+.trial-bar{
+  background:var(--orange-pale);border:1px solid rgba(255,90,42,.2);
+  border-radius:14px;padding:18px 22px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:12px;margin-bottom:20px;
+}
+.trial-text{font-size:15px;font-weight:700;color:var(--forest);}
+.trial-sub{font-size:12px;color:var(--forest-mid);}
+/* plan card */
+.plan{
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);
+  border-radius:18px;padding:26px 22px;
+  display:flex;flex-direction:column;gap:14px;
+  transition:all .3s;cursor:default;position:relative;
+}
+.plan:hover{transform:translateY(-4px);border-color:rgba(255,90,42,.35);}
+.plan.hot{background:var(--orange);border-color:transparent;}
+.plan-tag{font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--orange);background:rgba(255,90,42,.15);border-radius:100px;padding:3px 11px;display:inline-block;}
+.plan.hot .plan-tag{color:var(--white);background:rgba(255,255,255,.2);}
+.plan-name{font-size:24px;font-weight:900;color:var(--ivory);letter-spacing:-.5px;font-family:'Inter',sans-serif;}
+.plan-name .o{color:var(--orange);}
+.plan.hot .plan-name .o{color:rgba(255,255,255,.7);}
+.plan-desc{font-size:13px;color:rgba(245,240,232,.5);line-height:1.6;}
+.plan.hot .plan-desc{color:rgba(255,255,255,.72);}
+.plan-price{font-size:34px;font-weight:900;color:var(--ivory);letter-spacing:-1px;font-family:'Inter',sans-serif;line-height:1;}
+.plan.hot .plan-price{color:var(--white);}
+.plan-price sub{font-size:13px;font-weight:400;color:rgba(245,240,232,.4);vertical-align:baseline;}
+.plan.hot .plan-price sub{color:rgba(255,255,255,.55);}
+.plan-feats{display:flex;flex-direction:column;gap:7px;flex:1;}
+.plan-feat{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:rgba(245,240,232,.6);}
+.plan-feat::before{content:'✓';color:var(--orange);font-weight:900;flex-shrink:0;}
+.plan.hot .plan-feat{color:rgba(255,255,255,.8);}
+.plan.hot .plan-feat::before{color:var(--white);}
+.plan-btn{
+  width:100%;padding:11px;border-radius:100px;
+  font-size:13px;font-weight:700;cursor:pointer;
+  font-family:'Tajawal',sans-serif;transition:all .2s;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.08);color:var(--ivory);
+}
+.plan-btn:hover{background:var(--orange);border-color:var(--orange);}
+.plan.hot .plan-btn{background:var(--white);color:var(--orange);border-color:transparent;}
+.plan.hot .plan-btn:hover{background:var(--forest);color:var(--white);}
+[data-lang="en"] .plan-btn{font-family:'Inter',sans-serif;}
+/* discount */
+.discount-box{
+  margin-top:20px;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.08);border-radius:12px;
+  padding:18px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+}
+.discount-lbl{font-size:13px;font-weight:700;color:rgba(245,240,232,.7);flex-shrink:0;}
+.d-row{display:flex;gap:8px;flex:1;min-width:220px;}
+.d-input{
+  flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);
+  border-radius:100px;padding:9px 18px;color:var(--ivory);font-size:13px;
+  font-family:'Inter',sans-serif;outline:none;direction:ltr;letter-spacing:2px;
+  transition:border-color .2s;
+}
+.d-input:focus{border-color:var(--orange);}
+.d-input::placeholder{color:rgba(245,240,232,.25);letter-spacing:1px;}
+.d-btn{
+  background:var(--orange);color:var(--white);border:none;
+  border-radius:100px;padding:9px 20px;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:'Tajawal',sans-serif;
+  white-space:nowrap;transition:background .2s;
+}
+.d-btn:hover{background:var(--orange-light);}
+[data-lang="en"] .d-btn{font-family:'Inter',sans-serif;}
+.d-msg{font-size:12px;font-weight:600;display:none;width:100%;}
+.d-msg.ok{color:#6DD68A;}.d-msg.err{color:#FF8A6D;}
 
-/* BRANDS */
-.brands-strip{text-align:center;padding:0 20px 60px;position:relative;z-index:1;}
-.brands-label{font-size:11px;color:var(--muted);margin-bottom:14px;}
-.brands-row{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;}
-.brand-pill{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 16px;font-size:12px;color:var(--muted);font-weight:700;transition:all .2s;cursor:default;}
-.brand-pill:hover{border-color:#C9A84C50;color:var(--text);}
+/* ── BEFORE/AFTER ── */
+.ba-section{background:var(--forest-mid);}
+.ba-section .s-label{color:rgba(245,240,232,.35);}
+.ba-section .s-label::after{background:rgba(245,240,232,.15);}
+.ba-section .s-h2{color:var(--ivory);}
+.ba-cols{display:grid;grid-template-columns:1fr 1fr;gap:2px;}
+@media(max-width:560px){.ba-cols{grid-template-columns:1fr;}}
+.ba-col{padding:clamp(28px,4vw,48px) clamp(20px,3vw,36px);}
+.ba-before{background:rgba(56,67,63,.22);}
+.ba-after{background:var(--orange);position:relative;overflow:hidden;}
+.ba-after::after{content:'✦';position:absolute;bottom:-24px;left:-8px;font-size:180px;color:rgba(255,255,255,.06);line-height:1;pointer-events:none;}
+.ba-hdr{font-size:11px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:24px;}
+.ba-before .ba-hdr{color:rgba(245,240,232,.35);}
+.ba-after .ba-hdr{color:rgba(255,255,255,.65);}
+.ba-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:14px;}
+.ba-before .ba-row{color:rgba(245,240,232,.45);}
+.ba-after .ba-row{color:rgba(255,255,255,.9);}
+.ba-time{margin-top:24px;padding-top:24px;border-top:1px solid rgba(255,255,255,.12);}
+.ba-before .ba-time{border-color:rgba(255,255,255,.06);}
+.ba-t-val{font-size:clamp(36px,5vw,54px);font-weight:900;letter-spacing:-2px;line-height:1;font-family:'Inter',sans-serif;}
+.ba-before .ba-t-val{color:rgba(245,240,232,.25);}
+.ba-after .ba-t-val{color:var(--white);}
+.ba-t-lbl{font-size:12px;margin-top:4px;letter-spacing:.3px;}
+.ba-before .ba-t-lbl{color:rgba(245,240,232,.25);}
+.ba-after .ba-t-lbl{color:rgba(255,255,255,.6);}
 
-/* FEATURES */
-.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;max-width:860px;margin:0 auto;}
-.feat-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 16px;transition:all .3s;cursor:default;}
-.feat-card:hover{background:#C9A84C0A;border-color:#C9A84C40;transform:translateY(-5px);box-shadow:0 12px 40px #C9A84C12;}
-.feat-icon{width:40px;height:40px;border-radius:10px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;margin-bottom:12px;transition:all .3s;}
-.feat-card:hover .feat-icon{background:#C9A84C20;border-color:#C9A84C35;}
-.feat-title{font-size:14px;font-weight:800;color:var(--text);margin-bottom:5px;transition:color .3s;}
-.feat-card:hover .feat-title{color:var(--gold);}
-.feat-sub{font-size:12px;color:var(--muted);line-height:1.6;}
+/* ── TESTIMONIALS ── */
+.testi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;}
+.testi-card{
+  background:var(--white);border-radius:18px;padding:26px 22px;
+  border:1px solid var(--border);transition:all .3s;
+}
+.testi-card:hover{transform:translateY(-4px);box-shadow:0 16px 36px rgba(56,67,63,.1);}
+.t-stars{color:var(--orange);letter-spacing:2px;font-size:13px;margin-bottom:14px;}
+.t-quote{font-size:14px;line-height:1.75;color:var(--forest);margin-bottom:18px;border-right:2px solid var(--forest-light);padding-right:12px;}
+[data-lang="en"] .t-quote{border-right:none;border-left:2px solid var(--forest-light);padding-right:0;padding-left:12px;}
+.t-author{display:flex;align-items:center;gap:10px;}
+.t-av{width:38px;height:38px;border-radius:50%;background:var(--orange-pale);color:var(--orange);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;}
+.t-name{font-size:14px;font-weight:700;color:var(--forest);}
+.t-role{font-size:11px;color:var(--forest-light);}
 
-/* HOW */
-.steps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:680px;margin:0 auto;}
-.step-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px 16px;text-align:center;transition:all .3s;cursor:default;}
-.step-card:hover{background:#C9A84C0A;border-color:#C9A84C40;transform:translateY(-5px);box-shadow:0 10px 36px #C9A84C12;}
-.step-icon-box{width:44px;height:44px;border-radius:12px;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;margin:0 auto 12px;transition:all .3s;}
-.step-card:hover .step-icon-box{background:#C9A84C20;border-color:#C9A84C35;}
-.step-num{width:24px;height:24px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:var(--muted);margin:0 auto 10px;transition:all .3s;}
-.step-card:hover .step-num{background:var(--gold);border-color:var(--gold);color:var(--bg);}
-.step-title{font-size:13px;font-weight:800;color:var(--text);margin-bottom:5px;transition:color .3s;}
-.step-card:hover .step-title{color:var(--gold);}
-.step-sub{font-size:11px;color:var(--muted);line-height:1.6;}
+/* ── CTA SECTION ── */
+.cta-section{
+  background:var(--forest);
+  padding:clamp(80px,12vw,160px) clamp(20px,5vw,60px);
+  text-align:center;position:relative;overflow:hidden;
+}
+.cta-bg-text{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:clamp(160px,28vw,320px);font-weight:900;letter-spacing:-8px;
+  color:transparent;-webkit-text-stroke:1px rgba(255,255,255,.04);
+  white-space:nowrap;pointer-events:none;font-family:'Inter',sans-serif;
+}
+.cta-eyebrow{font-size:11px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--orange);margin-bottom:20px;position:relative;}
+.cta-h2{font-size:clamp(38px,7vw,90px);font-weight:900;letter-spacing:-2px;color:var(--ivory);line-height:.95;margin-bottom:18px;position:relative;}
+.cta-sub{font-size:16px;color:rgba(245,240,232,.45);margin-bottom:36px;position:relative;}
+.cta-form{display:flex;gap:8px;max-width:460px;margin:0 auto 16px;flex-wrap:wrap;justify-content:center;position:relative;}
+.cta-email{
+  flex:1;min-width:210px;background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.15);border-radius:100px;
+  padding:14px 22px;color:var(--ivory);font-size:15px;
+  font-family:'Tajawal',sans-serif;outline:none;direction:ltr;
+  transition:border-color .2s;
+}
+[data-lang="en"] .cta-email{font-family:'Inter',sans-serif;}
+.cta-email:focus{border-color:var(--orange);}
+.cta-email::placeholder{color:rgba(245,240,232,.3);}
+.cta-submit{
+  background:var(--orange);color:var(--white);border:none;
+  border-radius:100px;padding:14px 28px;font-size:15px;font-weight:700;
+  cursor:pointer;font-family:'Tajawal',sans-serif;
+  transition:all .2s;white-space:nowrap;
+}
+[data-lang="en"] .cta-submit{font-family:'Inter',sans-serif;}
+.cta-submit:hover{background:var(--orange-light);transform:translateY(-1px);}
+.cta-success{
+  background:rgba(255,90,42,.15);border:1px solid rgba(255,90,42,.3);
+  border-radius:10px;padding:14px 22px;font-size:15px;
+  color:var(--orange);font-weight:700;display:none;
+  max-width:460px;margin:0 auto;position:relative;
+}
+.cta-note{font-size:12px;color:rgba(245,240,232,.25);position:relative;}
 
-/* BEFORE/AFTER */
-.ba-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;max-width:740px;margin:0 auto;}
-.ba-card{border-radius:16px;padding:20px 18px;}
-.ba-before{background:#E0505008;border:1px solid #E0505020;}
-.ba-after{background:#4EC87A08;border:1px solid #4EC87A20;}
-.ba-header{font-size:12px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;gap:6px;}
-.ba-before .ba-header{color:var(--red);}
-.ba-after .ba-header{color:var(--green);}
-.ba-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:var(--muted);}
-.ba-x{color:var(--red);font-size:11px;}
-.ba-check{color:var(--green);font-size:11px;}
-.ba-result{margin-top:14px;padding:8px 12px;border-radius:8px;text-align:center;}
-.ba-before .ba-result{background:#E0505012;border:1px solid #E0505025;}
-.ba-after .ba-result{background:#4EC87A12;border:1px solid #4EC87A25;}
-.ba-time{font-size:22px;font-weight:900;}
-.ba-before .ba-time{color:var(--red);}
-.ba-after .ba-time{color:var(--green);}
-.ba-time-label{font-size:10px;color:var(--muted);margin-top:2px;}
-.vs-circle{width:44px;height:44px;border-radius:50%;background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:var(--muted);flex-shrink:0;}
+/* ── STICKY MOBILE CTA ── */
+.sticky{
+  position:fixed;bottom:0;left:0;right:0;z-index:200;
+  background:var(--ivory);border-top:1px solid var(--border);
+  padding:10px 16px;display:none;
+}
+.sticky-inner{display:flex;gap:8px;max-width:480px;margin:0 auto;}
+.sticky-inner .btn-primary{flex:1;justify-content:center;padding:11px 16px;font-size:14px;}
+.sticky-inner .btn-ghost{padding:11px 14px;font-size:14px;}
+@media(max-width:768px){.sticky{display:block;}body{padding-bottom:72px;}}
 
-/* CTA STRIP */
-.cta-strip{background:radial-gradient(ellipse at center,#C9A84C0E,transparent 65%);border:1px solid #C9A84C20;border-radius:20px;padding:36px 28px;display:grid;grid-template-columns:auto 1fr auto;gap:24px;align-items:center;max-width:740px;margin:0 auto;}
-.cta-stat{text-align:center;}
-.cta-stat-val{font-size:32px;font-weight:900;color:var(--gold);}
-.cta-stat-label{font-size:11px;color:var(--muted);}
-.cta-middle{text-align:center;}
-.cta-middle-title{font-size:clamp(18px,3vw,26px);font-weight:900;color:var(--text);margin-bottom:6px;}
-.cta-middle-sub{font-size:12px;color:var(--muted);}
+/* ── FOOTER ── */
+footer{
+  background:var(--forest);border-top:1px solid rgba(255,255,255,.06);
+  padding:28px clamp(20px,5vw,60px);
+  display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
+}
+.f-logo{display:flex;align-items:center;gap:8px;}
+.f-wordmark{font-size:17px;font-weight:900;letter-spacing:-.5px;font-family:'Inter',sans-serif;}
+.f-wordmark .pod{color:var(--forest-light);}
+.f-wordmark .lup{color:var(--forest-light);}
+.f-links{display:flex;gap:18px;flex-wrap:wrap;}
+.f-link{font-size:12px;color:rgba(245,240,232,.35);text-decoration:none;transition:color .2s;}
+.f-link:hover{color:var(--ivory);}
+.f-copy{font-size:11px;color:rgba(245,240,232,.2);}
 
-/* TESTIMONIALS */
-.testi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;max-width:860px;margin:0 auto;}
-.testi-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px 20px;transition:all .3s;cursor:default;}
-.testi-card:hover{background:#C9A84C07;border-color:#C9A84C30;transform:translateY(-4px);box-shadow:0 8px 30px #C9A84C10;}
-.stars{display:flex;gap:4px;margin-bottom:12px;}
-.star{color:var(--gold);font-size:12px;}
-.testi-text{font-size:13px;color:var(--text);line-height:1.8;margin-bottom:16px;border-right:2px solid var(--goldD);padding-right:12px;}
-.testi-author{display:flex;align-items:center;gap:10px;}
-.testi-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;flex-shrink:0;}
-.testi-name{font-size:13px;font-weight:800;color:var(--text);}
-.testi-role{font-size:11px;color:var(--muted);}
-
-/* PRICING */
-.plans-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;max-width:820px;margin:0 auto;}
-.plan-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:26px 22px;position:relative;transition:all .3s;cursor:default;display:flex;flex-direction:column;gap:16px;}
-.plan-card:hover{border-color:#C9A84C50;transform:translateY(-6px);box-shadow:0 0 50px #C9A84C12;}
-.plan-card.hot{background:linear-gradient(160deg,#C9A84C0E,var(--card));border-color:#C9A84C50;box-shadow:0 0 40px #C9A84C12;}
-.plan-hot-badge{position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,var(--goldL),var(--gold));border-radius:0 0 10px 10px;padding:4px 16px;font-size:10px;font-weight:900;color:var(--bg);white-space:nowrap;}
-.plan-name{font-size:13px;color:var(--muted);font-weight:700;margin-bottom:10px;}
-.plan-price{display:flex;align-items:baseline;gap:4px;margin-bottom:4px;}
-.plan-price-val{font-size:36px;font-weight:900;color:var(--text);line-height:1;}
-.plan-card.hot .plan-price-val{color:var(--gold);}
-.plan-price-unit{font-size:12px;color:var(--muted);}
-.plan-desc{font-size:12px;color:var(--muted);}
-.plan-feats{display:flex;flex-direction:column;gap:8px;flex:1;}
-.plan-feat{display:flex;gap:8px;font-size:12px;color:var(--muted);}
-.plan-feat-check{color:var(--green);flex-shrink:0;}
-.plan-btn{width:100%;padding:12px;border-radius:10px;font-size:13px;font-weight:800;cursor:pointer;font-family:'Tajawal',sans-serif;transition:all .2s;}
-.plan-btn-main{background:linear-gradient(135deg,var(--goldL),var(--gold));border:none;color:var(--bg);}
-.plan-btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);}
-.plan-btn-ghost:hover{border-color:var(--gold);color:var(--gold);}
-
-/* FINAL CTA */
-.final-cta{background:radial-gradient(ellipse at center,#C9A84C0D,transparent 65%);border:1px solid #C9A84C18;border-radius:24px;padding:50px 28px;text-align:center;max-width:600px;margin:0 auto;}
-.final-title{font-size:clamp(22px,4vw,32px);font-weight:900;color:var(--text);margin-bottom:10px;}
-.final-sub{font-size:13px;color:var(--muted);line-height:1.8;margin-bottom:28px;}
-.email-row{display:flex;gap:8px;max-width:420px;margin:0 auto;flex-wrap:wrap;justify-content:center;}
-.email-input{flex:1;min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 16px;color:var(--text);font-size:14px;direction:ltr;font-family:'Tajawal',sans-serif;outline:none;transition:border-color .2s;}
-.email-input:focus{border-color:#C9A84C60;}
-.email-input::placeholder{color:var(--dim);}
-.join-success{background:#4EC87A12;border:1px solid #4EC87A30;border-radius:12px;padding:16px 24px;font-size:15px;color:var(--green);font-weight:700;display:none;}
-.final-note{margin-top:14px;font-size:11px;color:var(--muted);}
-
-/* FOOTER */
-footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:22px 20px;}
-.footer-inner{max-width:860px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
-.footer-logo{font-size:16px;font-weight:900;color:var(--text);}
-.footer-logo span{color:var(--gold);}
-.footer-logo .star{color:var(--blue);}
-.footer-links{display:flex;gap:12px;}
-.footer-link{font-size:11px;color:var(--muted);text-decoration:none;transition:color .2s;}
-.footer-link:hover{color:var(--gold);}
-.footer-copy{font-size:11px;color:var(--muted);}
-
-/* SCROLL REVEAL */
-.reveal{opacity:0;transform:translateY(22px);transition:all .6s ease;}
+/* ── REVEAL ── */
+.reveal{opacity:0;transform:translateY(28px);transition:opacity .65s ease,transform .65s ease;}
 .reveal.visible{opacity:1;transform:translateY(0);}
+.d1{transition-delay:.08s;}.d2{transition-delay:.16s;}.d3{transition-delay:.24s;}
+
+
+/* ── PREMIUM REDESIGN OVERRIDES ── */
+body{
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255,90,42,.075), transparent 34%),
+    radial-gradient(circle at 84% 30%, rgba(94,113,106,.11), transparent 36%),
+    var(--ivory);
+}
+nav{height:76px;}
+nav.solid{
+  background:rgba(245,240,232,.86);
+  backdrop-filter:blur(18px);
+}
+.nav-wordmark{
+  font-size:24px;
+  letter-spacing:-.8px;
+}
+.hero{
+  min-height:100svh;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(320px,470px);
+  align-items:center;
+  gap:clamp(32px,7vw,96px);
+  padding-top:120px;
+}
+.hero-content{position:relative;z-index:2;}
+.hero::before{
+  content:"";
+  position:absolute;
+  inset:90px 0 auto auto;
+  width:48vw;
+  height:48vw;
+  max-width:620px;
+  max-height:620px;
+  background:radial-gradient(circle, rgba(255,90,42,.10), transparent 58%);
+  pointer-events:none;
+}
+.hero-h1{
+  max-width:680px;
+  font-size:clamp(58px,9vw,118px);
+}
+.hero-h1 .lup-core{
+  display:inline-block;
+  color:var(--orange);
+  position:relative;
+}
+.hero-h1 .lup-core::after{
+  content:"";
+  position:absolute;
+  width:.18em;
+  height:.18em;
+  border-radius:999px;
+  background:var(--orange);
+  inset:auto .12em -.02em auto;
+  box-shadow:0 0 0 10px rgba(255,90,42,.08);
+}
+.hero-sub{font-size:clamp(18px,2.1vw,24px);}
+.hero-demo{
+  position:relative;
+  z-index:2;
+  border:1px solid var(--border);
+  border-radius:28px;
+  padding:24px;
+  background:rgba(255,255,255,.52);
+  box-shadow:0 30px 80px rgba(56,67,63,.14);
+  backdrop-filter:blur(18px);
+}
+.demo-top{display:flex;gap:16px;align-items:center;margin-bottom:18px;}
+.demo-cover{
+  width:96px;height:96px;border-radius:18px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,.34), transparent 36%),
+    linear-gradient(145deg,var(--forest-mid),var(--forest));
+  display:grid;place-items:center;color:var(--ivory);
+}
+.demo-cover svg{width:54px;height:54px;opacity:.92;}
+.demo-title{font-size:18px;font-weight:900;color:var(--forest);}
+.demo-meta{font-size:14px;color:var(--forest-mid);margin-top:4px;direction:ltr;text-align:right;}
+.wave{
+  height:54px;border-radius:14px;background:rgba(94,113,106,.10);
+  overflow:hidden;position:relative;margin:16px 0 22px;border:1px solid rgba(94,113,106,.09);
+}
+.wave::before{
+  content:"";
+  position:absolute;inset:0;
+  background:
+    repeating-linear-gradient(90deg,
+      rgba(94,113,106,.34) 0 2px,
+      transparent 2px 6px);
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 900 100'%3E%3Cpath fill='black' d='M0 56 Q12 44 24 56 T48 56 T72 56 T96 56 T120 56 T144 56 T168 56 T192 56 T216 56 T240 56 T264 56 T288 56 T312 56 T336 56 T360 56 T384 56 T408 56 T432 56 T456 56 T480 56 T504 56 T528 56 T552 56 T576 56 T600 56 T624 56 T648 56 T672 56 T696 56 T720 56 T744 56 T768 56 T792 56 T816 56 T840 56 T864 56 T888 56 V100 H0 Z'/%3E%3C/svg%3E");
+  opacity:.65;
+}
+.wave-highlight{
+  position:absolute;top:0;bottom:0;right:34%;width:30%;
+  background:rgba(255,90,42,.22);
+  border-inline:2px solid var(--orange);
+}
+.demo-section-title{
+  display:flex;align-items:center;gap:8px;
+  color:var(--forest);font-weight:900;margin-bottom:12px;
+}
+.spark{color:var(--orange);}
+.clip-row{
+  display:grid;grid-template-columns:72px 1fr auto;gap:12px;align-items:center;
+  padding:10px 0;border-bottom:1px solid rgba(56,67,63,.08);
+}
+.clip-thumb{
+  height:48px;border-radius:10px;background:linear-gradient(145deg,var(--forest),var(--forest-mid));
+  position:relative;overflow:hidden;
+}
+.clip-thumb::after{
+  content:"▶";position:absolute;left:8px;bottom:6px;
+  width:22px;height:22px;border-radius:50%;background:rgba(245,240,232,.92);
+  color:var(--forest);display:grid;place-items:center;font-size:9px;
+}
+.clip-time{direction:ltr;text-align:right;font-family:'Inter',sans-serif;font-weight:800;color:var(--forest);}
+.clip-caption{font-size:12px;color:var(--forest-mid);margin-top:2px;}
+.score{
+  font-family:'Inter',sans-serif;font-weight:800;color:var(--orange);
+  background:rgba(255,90,42,.10);border-radius:8px;padding:4px 7px;font-size:12px;
+}
+.demo-export{
+  margin-top:18px;width:100%;border:0;border-radius:14px;padding:14px;
+  color:var(--forest);font-family:'Tajawal',sans-serif;font-weight:900;
+  background:linear-gradient(90deg,rgba(94,113,106,.14),rgba(94,113,106,.06));
+}
+.tape-inner span{
+  font-family:'Tajawal','Inter',sans-serif;
+  -webkit-text-stroke:1.5px rgba(56,67,63,.14);
+}
+.stats-bar{background:linear-gradient(135deg,var(--forest),var(--forest-mid));}
+.how-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:18px;background:transparent;
+}
+.how-card{
+  border:1px solid var(--border);
+  border-radius:24px;
+  background:rgba(255,255,255,.38);
+  box-shadow:0 18px 45px rgba(56,67,63,.06);
+}
+.how-icon-box{
+  background:rgba(94,113,106,.10);
+  color:var(--forest);
+  border-color:rgba(94,113,106,.16);
+}
+.products-section,.cta-section,footer{
+  background:linear-gradient(135deg,var(--forest),var(--forest-mid));
+}
+.ba-section{background:linear-gradient(135deg,var(--forest-mid),var(--forest));}
+@media(max-width:900px){
+  .hero{grid-template-columns:1fr;gap:36px;}
+  .hero-demo{order:2;max-width:520px;width:100%;margin:0 auto;}
+  .how-grid{grid-template-columns:1fr;}
+}
+
+/* ── MOBILE ── */
+@media(max-width:768px){
+  nav{padding:0 18px;}
+  .hero{padding:86px 18px 36px;}
+  .hero-h1{letter-spacing:-2px;}
+  .stats-bar .stat-item{border:none;border-bottom:1px solid rgba(255,255,255,.06);}
+  .stats-bar .stat-item:last-child{border:none;}
+  .how-card{padding:26px 20px;}
+  .how-num{font-size:56px;}
+  .ba-col{padding:26px 20px;}
+  .plan{padding:22px 18px;}
+  .testi-card{padding:20px 18px;}
+  .cta-section{padding:60px 18px;}
+  .discount-box{flex-direction:column;align-items:stretch;}
+  .d-row{flex-direction:column;}
+}
+
+
+/* ── BRAND LOGO UPDATE ── */
+.nav-logo{gap:12px;}
+.brand-mark{display:block;flex:0 0 auto;filter:drop-shadow(0 10px 24px rgba(56,67,63,.10));}
+.nav-wordmark,.f-wordmark{font-family:'Inter',sans-serif;font-weight:900;color:var(--forest);}
+.nav-wordmark .pod,.nav-wordmark .lup{color:var(--forest);}
+.f-wordmark .pod,.f-wordmark .lup{color:var(--ivory);}
+.nav-logo:hover .brand-mark circle:first-of-type{filter:drop-shadow(0 0 10px rgba(255,90,42,.45));}
+@media(max-width:768px){.brand-mark{width:40px;height:40px}.nav-wordmark{font-size:21px;}}
+
 </style>
 </head>
 <body>
 
-<canvas id="particles"></canvas>
-<div class="ambient"><div class="ambient-glow"></div><div class="grid-bg"></div></div>
+<!-- LANG -->
+<button class="lang-btn" id="langBtn" onclick="toggleLang()">EN</button>
+
+<!-- STICKY MOBILE CTA -->
+<div class="sticky">
+  <div class="sticky-inner">
+    <button class="btn-primary" onclick="scrollCTA()">
+      <span class="ar">جرّب مجاناً ←</span>
+      <span class="en">Try Free →</span>
+    </button>
+    <button class="btn-ghost" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">
+      <span class="ar">الأسعار</span>
+      <span class="en">Pricing</span>
+    </button>
+  </div>
+</div>
 
 <!-- NAV -->
-<nav id="nav">
-  <a href="#" class="logo">
-    <div class="logo-box">LuP</div>
-    <span class="logo-text">Lu<span>P</span><span class="logo-star">✦</span></span>
+<nav id="mainNav">
+  <a href="#" class="nav-logo">
+    <!-- Podlup essence logo -->
+    <svg class="brand-mark" width="48" height="48" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="4" y="4" width="56" height="56" rx="18" fill="rgba(94,113,106,.10)"/>
+      <path d="M20 48V24.5C20 16.5 26.5 11 34.6 11C43 11 50 17.4 50 26C50 34.6 43 41 34.6 41H28.8" stroke="#38433F" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M28.8 41C23.5 41 20 37.2 20 32" stroke="#5E716A" stroke-width="7.5" stroke-linecap="round"/>
+      <circle cx="35" cy="26" r="7.2" fill="#FF5A2A"/>
+      <circle cx="35" cy="26" r="13" stroke="#9EA9A5" stroke-width="1.5" opacity=".45"/>
+    </svg>
+    <span class="nav-wordmark"><span class="pod">Pod</span><span class="lup">lup</span></span>
   </a>
-  <div class="nav-links">
-    <a href="#features" class="nav-a">المميزات</a>
-    <a href="#how" class="nav-a">كيف يعمل؟</a>
-    <a href="#pricing" class="nav-a">الأسعار</a>
-    <a href="#" class="nav-a">تسجيل الدخول</a>
-    <button class="btn-main">ابدأ مجاناً</button>
+  <div class="nav-right">
+    <a href="#how" class="nav-link ar">كيف يعمل</a>
+    <a href="#how" class="nav-link en">How it works</a>
+    <a href="#pricing" class="nav-link ar">الأسعار</a>
+    <a href="#pricing" class="nav-link en">Pricing</a>
+    <button class="nav-cta" onclick="scrollCTA()">
+      <span class="ar">جرّب مجاناً ←</span>
+      <span class="en">Try Free →</span>
+    </button>
   </div>
 </nav>
 
 <!-- HERO -->
 <section class="hero">
-  <div class="pill"><div class="pill-dot"></div><span>العربي للعربي — أول أداة مقاطع للبودكاست العربي</span></div>
-  <h1>
-    <span class="line1">حوّل البودكاست إلى</span>
-    <span class="line2">مقاطع فيروسية</span>
-    <span class="line3" id="tw-line">خلال دقيقة واحدة ⚡<span class="tw-cursor"></span></span>
-  </h1>
-  <p class="hero-sub">LuP يستخرج أقوى اللحظات من حلقات البودكاست العربي، يكتب الكابشن، ويضبط المقاس لكل منصة — <strong>تلقائياً.</strong></p>
-  <div class="hero-ctas">
-    <button class="btn-main" style="padding:14px 28px;font-size:15px;">ابدأ أول مقطع مجاناً الآن</button>
-    <button class="btn-ghost" style="padding:14px 22px;font-size:14px;">▶ شاهد مثال حقيقي</button>
-  </div>
-  <div class="trust-badges">
-    <div class="trust-badge"><span>💳</span><span>بدون بطاقة ائتمانية</span></div>
-    <div class="trust-badge"><span>⚡</span><span>جاهز في أقل من دقيقة</span></div>
-    <div class="trust-badge"><span>🔄</span><span>إلغاء في أي وقت</span></div>
-  </div>
-  <div class="demo-wrap">
-    <div class="ring1"></div><div class="ring2"></div>
-    <div class="demo-card">
-      <div class="mac-bar">
-        <div class="mac-dots">
-          <div class="mac-dot" style="background:#E05050"></div>
-          <div class="mac-dot" style="background:#E0B850"></div>
-          <div class="mac-dot" style="background:#50C878"></div>
-        </div>
-        <div class="mac-title">lup.sa — معالجة الحلقة</div>
-        <div class="mac-live"></div>
-      </div>
-      <div class="wave-section">
-        <div class="wave-label">🎙️ بودكاست فنجان — الحلقة 123</div>
-        <div class="waveform" id="waveform"></div>
-        <div class="wave-times">
-          <span class="wave-time">00:00</span>
-          <span class="wave-status">● يحلل...</span>
-          <span class="wave-time">1:42:18</span>
-        </div>
-      </div>
-      <div class="clip-result" id="clip-result">
-        <div class="clip-top">
-          <span class="clip-label">لُب يقترح</span>
-          <div class="score-badge"><div class="score-dot"></div><span class="score-val" id="clip-score">97</span></div>
-        </div>
-        <div class="clip-title" id="clip-title">تركت وظيفتي بعد 7 سنوات — وما ندمت لحظة</div>
-        <div class="clip-time" id="clip-time">04:12←05:08 · 56ث</div>
-        <div class="clip-bottom">
-          <div class="platforms" id="clip-platforms"></div>
-          <span class="views" id="clip-views">👁 1.2M</span>
-        </div>
-      </div>
-      <div class="demo-dots" id="demo-dots"></div>
+  <div class="hero-content">
+    <div class="hero-eyebrow ar">العربي للعربي · ذكاء اصطناعي للبودكاست</div>
+    <div class="hero-eyebrow en">Arabic AI · For Arabic Podcasters</div>
+    <h1 class="hero-h1 ar">استخرج<br><span class="lup-core">لُب</span><br>البودكاست</h1>
+    <h1 class="hero-h1 en">Extract<br><span class="lup-core">the gist</span><br>of podcasts.</h1>
+    <p class="hero-sub ar">من ساعتين من الحديث إلى مقاطع جاهزة للنشر خلال أقل من دقيقة.</p>
+    <p class="hero-sub en">From two hours of conversation to publish-ready clips in under a minute.</p>
+    <div class="hero-actions">
+      <button class="btn-primary" onclick="scrollCTA()">
+        <span class="ar">ابدأ تجربة 24 ساعة ←</span>
+        <span class="en">Start 24h Trial →</span>
+      </button>
+      <button class="btn-ghost">
+        <span class="ar">▶ شاهد مثالاً</span>
+        <span class="en">▶ See example</span>
+      </button>
+    </div>
+    <div class="hero-trust">
+      <div class="trust-item"><div class="trust-dot"></div><span class="ar">تجربة 24 ساعة مجانية</span><span class="en">24h free trial</span></div>
+      <div class="trust-item"><div class="trust-dot"></div><span class="ar">بدون بطاقة ائتمانية</span><span class="en">No credit card</span></div>
+      <div class="trust-item"><div class="trust-dot"></div><span class="ar">إلغاء في أي وقت</span><span class="en">Cancel anytime</span></div>
     </div>
   </div>
-  <div class="stats-grid">
-    <div class="stat-item"><div class="stat-val" id="s1">0</div><div class="stat-label">تقييم المستخدمين</div></div>
-    <div class="stat-item"><div class="stat-val" id="s2">0</div><div class="stat-label">بودكاست يستخدم LuP</div></div>
-    <div class="stat-item"><div class="stat-val" id="s3">0</div><div class="stat-label">مقطع تم إنشاؤه</div></div>
-    <div class="stat-item"><div class="stat-val" id="s4">0</div><div class="stat-label">مشاهدة للمقاطع</div></div>
+
+  <div class="hero-demo reveal">
+    <div class="demo-top">
+      <div class="demo-cover" aria-hidden="true">
+        <svg viewBox="0 0 64 64" fill="none">
+          <path d="M32 10c-6 0-10 4-10 10v12c0 6 4 10 10 10s10-4 10-10V20c0-6-4-10-10-10Z" stroke="currentColor" stroke-width="4"/>
+          <path d="M16 29v3c0 9 7 16 16 16s16-7 16-16v-3M32 48v8M23 56h18M8 27v10M56 27v10M3 31v2M61 31v2" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <div class="demo-title ar">حلقة جديدة</div>
+        <div class="demo-title en">New episode</div>
+        <div class="demo-meta">02:13:42</div>
+      </div>
+    </div>
+    <div class="wave"><div class="wave-highlight"></div></div>
+    <div class="demo-section-title"><span class="spark">✦</span><span class="ar">أفضل المقاطع</span><span class="en">Best moments</span></div>
+    <div class="clip-row">
+      <div class="clip-thumb"></div>
+      <div><div class="clip-time">04:12 - 05:08</div><div class="clip-caption ar">فكرة قوية حول بناء العادات</div><div class="clip-caption en">Strong idea about habits</div></div>
+      <div class="score">97</div>
+    </div>
+    <div class="clip-row">
+      <div class="clip-thumb"></div>
+      <div><div class="clip-time">06:44 - 07:33</div><div class="clip-caption ar">نقطة مهمة عن التركيز العميق</div><div class="clip-caption en">Key point about deep focus</div></div>
+      <div class="score">94</div>
+    </div>
+    <div class="clip-row">
+      <div class="clip-thumb"></div>
+      <div><div class="clip-time">18:11 - 19:02</div><div class="clip-caption ar">خلاصة ملهمة في دقيقة</div><div class="clip-caption en">A motivating summary</div></div>
+      <div class="score">91</div>
+    </div>
+    <button class="demo-export ar">تصدير المقاطع ↓</button>
+    <button class="demo-export en">Export clips ↓</button>
+  </div>
+
+  <div class="hero-tape" aria-hidden="true">
+    <div class="tape-inner">
+      <span>لُب</span><span>لحظة</span><span>فكرة</span><span>مقطع</span><span>انتشار</span>
+      <span>لُب</span><span>لحظة</span><span>فكرة</span><span>مقطع</span><span>انتشار</span>
+      <span>لُب</span><span>لحظة</span><span>فكرة</span><span>مقطع</span><span>انتشار</span>
+    </div>
   </div>
 </section>
 
-<!-- BRANDS -->
-<div class="brands-strip reveal">
-  <div class="brands-label">يستخدمه صناع محتوى من</div>
-  <div class="brands-row">
-    <div class="brand-pill">فنجان</div>
-    <div class="brand-pill">سوالف بزنس</div>
-    <div class="brand-pill">ثمانية</div>
-    <div class="brand-pill">Business بالعربي</div>
-    <div class="brand-pill">إذاعي</div>
-    <div class="brand-pill">مسار</div>
+<!-- STATS -->
+<div class="stats-bar reveal">
+  <div class="stat-item">
+    <div class="stat-num"><span id="s1">850</span>+</div>
+    <div class="stat-lbl ar">بودكاست يستخدم Podlup</div>
+    <div class="stat-lbl en">Podcasts using Podlup</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num"><span id="s2">12</span>K+</div>
+    <div class="stat-lbl ar">مقطع تم توليده</div>
+    <div class="stat-lbl en">Clips generated</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num"><span id="s3">1.2</span>M+</div>
+    <div class="stat-lbl ar">مشاهدة للمقاطع</div>
+    <div class="stat-lbl en">Views on clips</div>
+  </div>
+  <div class="stat-item">
+    <div class="stat-num"><span class="accent"><span id="s4">48</span>s</span></div>
+    <div class="stat-lbl ar">متوسط وقت المعالجة</div>
+    <div class="stat-lbl en">Avg. processing time</div>
   </div>
 </div>
 
-<!-- FEATURES -->
-<section id="features">
-  <div class="section-head reveal">
-    <div class="section-tag">● المميزات</div>
-    <div class="section-title">ذكاء يفهم المحتوى العربي</div>
-  </div>
-  <div class="features-grid">
-    <div class="feat-card reveal"><div class="feat-icon">🧠</div><div class="feat-title">يكتشف أفضل اللحظات تلقائياً</div><div class="feat-sub">ذكاء اصطناعي يفهم السياق ويختار الأقوى</div></div>
-    <div class="feat-card reveal"><div class="feat-icon">✍️</div><div class="feat-title">يكتب الكابشن بالعربي</div><div class="feat-sub">كابشن جذاب ومتوافق مع كل منصة</div></div>
-    <div class="feat-card reveal"><div class="feat-icon">📐</div><div class="feat-title">يضبط المقاس لكل منصة</div><div class="feat-sub">تيك توك، إنستغرام، يوتيوب، لنكدإن والمزيد</div></div>
-    <div class="feat-card reveal"><div class="feat-icon">⚡</div><div class="feat-title">جاهز في أقل من دقيقة</div><div class="feat-sub">من رفع الحلقة إلى المقاطع الجاهزة</div></div>
+<!-- HOW IT WORKS -->
+<section class="section" id="how">
+  <div class="s-label reveal ar">كيف يعمل</div>
+  <div class="s-label reveal en">How it works</div>
+  <h2 class="s-h2 reveal ar">3 خطوات.<br><em>دقيقة واحدة.</em></h2>
+  <h2 class="s-h2 reveal en">3 steps.<br><em>One minute.</em></h2>
+  <div class="how-grid">
+    <div class="how-card reveal">
+      <div class="how-num">01</div>
+      <div class="how-icon-box">↑</div>
+      <div class="how-title ar">ارفع الحلقة</div>
+      <div class="how-title en">Upload the episode</div>
+      <div class="how-body ar">ارفع رابط الحلقة أو ملف صوتي، واترك الباقي على Podlup.</div>
+      <div class="how-body en">Upload a link or audio file, then let Podlup handle the rest.</div>
+    </div>
+    <div class="how-card reveal d1">
+      <div class="how-num">02</div>
+      <div class="how-icon-box">●</div>
+      <div class="how-title ar">دع Podlup يستمع</div>
+      <div class="how-title en">Let Podlup listen</div>
+      <div class="how-body ar">يحلل السياق ويبحث عن اللحظات الأكثر قيمة وقابلية للانتشار.</div>
+      <div class="how-body en">It analyzes context and finds the most valuable, shareable moments.</div>
+    </div>
+    <div class="how-card reveal d2">
+      <div class="how-num">03</div>
+      <div class="how-icon-box">✦</div>
+      <div class="how-title ar">استلم أفضل المقاطع</div>
+      <div class="how-title en">Receive the best clips</div>
+      <div class="how-body ar">مقاطع جاهزة للنشر مع النصوص والتوقيت والمقاسات المناسبة.</div>
+      <div class="how-body en">Ready-to-publish clips with captions, timing, and platform formats.</div>
+    </div>
   </div>
 </section>
 
-<!-- HOW -->
-<section id="how">
-  <div class="section-head reveal">
-    <div class="section-tag">● كيف يعمل</div>
-    <div class="section-title">3 خطوات فقط</div>
+<!-- PRODUCTS -->
+<section class="section products-section" id="pricing">
+  <div class="s-label reveal ar">المنتجات والأسعار</div>
+  <div class="s-label reveal en">Products & Pricing</div>
+  <h2 class="s-h2 reveal ar">باقة لكل<br><em>احتياج</em></h2>
+  <h2 class="s-h2 reveal en">A plan for<br><em>every need</em></h2>
+
+  <div class="trial-bar reveal">
+    <div>
+      <div class="trial-text ar">🎁 جرّب Podlup مجاناً لمدة 24 ساعة كاملة</div>
+      <div class="trial-text en">🎁 Try Podlup free for 24 full hours</div>
+      <div class="trial-sub ar">لا بطاقة · لا التزام · ابدأ الآن</div>
+      <div class="trial-sub en">No card · No commitment · Start now</div>
+    </div>
+    <button class="btn-primary" onclick="scrollCTA()">
+      <span class="ar">ابدأ التجربة ←</span>
+      <span class="en">Start Trial →</span>
+    </button>
   </div>
-  <div class="steps-grid">
-    <div class="step-card reveal"><div class="step-icon-box">☁️</div><div class="step-num">1</div><div class="step-title">ارفع الحلقة</div><div class="step-sub">ارفع ملف الصوت أو رابط الحلقة</div></div>
-    <div class="step-card reveal"><div class="step-icon-box">🧠</div><div class="step-num">2</div><div class="step-title">LuP يحلل ويختار</div><div class="step-sub">الذكاء الاصطناعي يحدد أفضل اللحظات</div></div>
-    <div class="step-card reveal"><div class="step-icon-box">📲</div><div class="step-num">3</div><div class="step-title">احصل على المقاطع</div><div class="step-sub">مقاطع، كابشن، ومقاسات متعددة</div></div>
+
+  <div class="plans-grid reveal">
+    <div class="plan">
+      <div class="plan-tag ar">للبداية</div><div class="plan-tag en">Starter</div>
+      <div class="plan-name">Pod<span class="o">lup</span> <span style="font-size:16px;opacity:.5;" class="ar">أسبوعي</span><span style="font-size:16px;opacity:.5;" class="en">Weekly</span></div>
+      <div class="plan-desc ar">حلقة واحدة أسبوعياً · 4 مقاطع جاهزة</div>
+      <div class="plan-desc en">One episode weekly · 4 ready clips</div>
+      <div class="plan-price">29 <sub class="ar">ريال/أسبوع</sub><sub class="en">SAR/wk</sub></div>
+      <div class="plan-feats">
+        <div class="plan-feat ar">Clips مدمج</div><div class="plan-feat en">Clips included</div>
+        <div class="plan-feat ar">كابشن عربي</div><div class="plan-feat en">Arabic captions</div>
+        <div class="plan-feat ar">3 منصات</div><div class="plan-feat en">3 platforms</div>
+      </div>
+      <button class="plan-btn ar">اشترك أسبوعياً</button>
+      <button class="plan-btn en">Subscribe weekly</button>
+    </div>
+
+    <div class="plan">
+      <div class="plan-tag ar">الأكثر طلباً</div><div class="plan-tag en">Most Popular</div>
+      <div class="plan-name">Pod<span class="o">lup</span> Clips</div>
+      <div class="plan-desc ar">4 حلقات شهرياً · 16 مقطع</div>
+      <div class="plan-desc en">4 episodes/month · 16 clips</div>
+      <div class="plan-price">99 <sub class="ar">ريال/شهر</sub><sub class="en">SAR/mo</sub></div>
+      <div class="plan-feats">
+        <div class="plan-feat ar">مقاطع فيروسية</div><div class="plan-feat en">Viral clips</div>
+        <div class="plan-feat ar">كابشن تلقائي</div><div class="plan-feat en">Auto captions</div>
+        <div class="plan-feat ar">تصدير HD</div><div class="plan-feat en">HD export</div>
+      </div>
+      <button class="plan-btn ar">اشترك في Clips</button>
+      <button class="plan-btn en">Subscribe to Clips</button>
+    </div>
+
+    <div class="plan">
+      <div class="plan-tag ar">للمحتوى الدولي</div><div class="plan-tag en">Global Content</div>
+      <div class="plan-name">Pod<span class="o">lup</span> Dub</div>
+      <div class="plan-desc ar">ترجمة صوتية بنبرة خليجية للمقاطع الأجنبية</div>
+      <div class="plan-desc en">Gulf-accent voice dubbing for foreign clips</div>
+      <div class="plan-price">149 <sub class="ar">ريال/شهر</sub><sub class="en">SAR/mo</sub></div>
+      <div class="plan-feats">
+        <div class="plan-feat ar">كل مميزات Clips</div><div class="plan-feat en">All Clips features</div>
+        <div class="plan-feat ar">صوت خليجي طبيعي</div><div class="plan-feat en">Natural Gulf voice</div>
+        <div class="plan-feat ar">دعم مباشر</div><div class="plan-feat en">Direct support</div>
+      </div>
+      <button class="plan-btn ar">اشترك في Dub</button>
+      <button class="plan-btn en">Subscribe to Dub</button>
+    </div>
+
+    <div class="plan">
+      <div class="plan-tag ar">محتوى نظيف</div><div class="plan-tag en">Clean Content</div>
+      <div class="plan-name">Pod<span class="o">lup</span> Nomu</div>
+      <div class="plan-desc ar">ينزع الموسيقى تلقائياً · يحتفظ بالصوت فقط</div>
+      <div class="plan-desc en">Auto music removal · Voice only</div>
+      <div class="plan-price">79 <sub class="ar">ريال/شهر</sub><sub class="en">SAR/mo</sub></div>
+      <div class="plan-feats">
+        <div class="plan-feat ar">نزع موسيقى تلقائي</div><div class="plan-feat en">Auto music removal</div>
+        <div class="plan-feat ar">مقاطع + كابشن</div><div class="plan-feat en">Clips + captions</div>
+        <div class="plan-feat ar">جودة صوت عالية</div><div class="plan-feat en">High audio quality</div>
+      </div>
+      <button class="plan-btn ar">اشترك في Nomu</button>
+      <button class="plan-btn en">Subscribe to Nomu</button>
+    </div>
+
+    <div class="plan hot">
+      <div class="plan-tag ar">⭐ الأفضل قيمة</div><div class="plan-tag en">⭐ Best Value</div>
+      <div class="plan-name">Pod<span class="o">lup</span> Pro</div>
+      <div class="plan-desc ar">كل المنتجات · حلقات غير محدودة · أولوية المعالجة</div>
+      <div class="plan-desc en">All products · Unlimited episodes · Priority processing</div>
+      <div class="plan-price">199 <sub class="ar">ريال/شهر</sub><sub class="en">SAR/mo</sub></div>
+      <div class="plan-feats">
+        <div class="plan-feat ar">Clips + Dub + Nomu</div><div class="plan-feat en">Clips + Dub + Nomu</div>
+        <div class="plan-feat ar">حلقات غير محدودة</div><div class="plan-feat en">Unlimited episodes</div>
+        <div class="plan-feat ar">مدير حساب مخصص</div><div class="plan-feat en">Dedicated manager</div>
+      </div>
+      <button class="plan-btn ar">اشترك في Pro</button>
+      <button class="plan-btn en">Subscribe to Pro</button>
+    </div>
+  </div>
+
+  <div class="discount-box reveal">
+    <div class="discount-lbl ar">🏷 عندك كود خصم؟</div>
+    <div class="discount-lbl en">🏷 Have a discount code?</div>
+    <div class="d-row">
+      <input class="d-input" id="dInput" placeholder="PODLUP20" maxlength="20">
+      <button class="d-btn ar" onclick="applyCode()">تطبيق</button>
+      <button class="d-btn en" onclick="applyCode()">Apply</button>
+    </div>
+    <div class="d-msg" id="dMsg"></div>
   </div>
 </section>
 
 <!-- BEFORE/AFTER -->
-<section>
-  <div class="section-head reveal">
-    <div class="section-tag">● المقارنة</div>
-    <div class="section-title">قبل LuP وبعد LuP</div>
-  </div>
-  <div class="ba-grid reveal">
-    <div class="ba-card ba-before">
-      <div class="ba-header"><span>😓</span> قبل LuP</div>
-      <div class="ba-row"><span class="ba-x">✕</span> تشاهد الحلقة كاملة</div>
-      <div class="ba-row"><span class="ba-x">✕</span> تبحث عن اللقطات</div>
-      <div class="ba-row"><span class="ba-x">✕</span> تقص وتمونتج</div>
-      <div class="ba-row"><span class="ba-x">✕</span> تكتب كابشن</div>
-      <div class="ba-row"><span class="ba-x">✕</span> تضبط المقاسات</div>
-      <div class="ba-row"><span class="ba-x">✕</span> ترفع وتنشر</div>
-      <div class="ba-result"><div class="ba-time">+2 ساعة</div><div class="ba-time-label">الوقت المستغرق</div></div>
+<section class="section ba-section">
+  <div class="s-label reveal ar">المقارنة</div>
+  <div class="s-label reveal en">Comparison</div>
+  <h2 class="s-h2 reveal ar">قبل Podlup<br><em>وبعده</em></h2>
+  <h2 class="s-h2 reveal en">Before Podlup<br><em>and after</em></h2>
+  <div class="ba-cols reveal">
+    <div class="ba-col ba-before">
+      <div class="ba-hdr ar">بدون Podlup</div>
+      <div class="ba-hdr en">Without Podlup</div>
+      <div class="ba-row">✕ <span class="ar">تشاهد الحلقة كاملة</span><span class="en">Watch full episode</span></div>
+      <div class="ba-row">✕ <span class="ar">تبحث يدوياً عن اللحظات</span><span class="en">Manually find moments</span></div>
+      <div class="ba-row">✕ <span class="ar">تقص وتمونتج</span><span class="en">Cut and edit manually</span></div>
+      <div class="ba-row">✕ <span class="ar">تكتب كابشن لكل منصة</span><span class="en">Write captions per platform</span></div>
+      <div class="ba-row">✕ <span class="ar">تضبط المقاسات وترفع</span><span class="en">Resize and upload</span></div>
+      <div class="ba-time">
+        <div class="ba-t-val ar">+٢ ساعة</div>
+        <div class="ba-t-val en">+2 hours</div>
+        <div class="ba-t-lbl ar">لكل حلقة</div>
+        <div class="ba-t-lbl en">per episode</div>
+      </div>
     </div>
-    <div class="vs-circle">VS</div>
-    <div class="ba-card ba-after">
-      <div class="ba-header"><span>😊</span> بعد LuP</div>
-      <div class="ba-row"><span class="ba-check">✓</span> ارفع الحلقة</div>
-      <div class="ba-row"><span class="ba-check">✓</span> اضغط Generate</div>
-      <div class="ba-row"><span class="ba-check">✓</span> استلم المقاطع والكابشن</div>
-      <div class="ba-row"><span class="ba-check">✓</span> جاهز للنشر</div>
-      <div class="ba-result"><div class="ba-time">أقل من دقيقة</div><div class="ba-time-label">الوقت المستغرق</div></div>
+    <div class="ba-col ba-after">
+      <div class="ba-hdr ar">مع Podlup</div>
+      <div class="ba-hdr en">With Podlup</div>
+      <div class="ba-row">✓ <span class="ar">ارفع الحلقة أو الصق الرابط</span><span class="en">Upload or paste link</span></div>
+      <div class="ba-row">✓ <span class="ar">اضغط Generate</span><span class="en">Press Generate</span></div>
+      <div class="ba-row">✓ <span class="ar">استلم المقاطع والكابشن</span><span class="en">Receive clips & captions</span></div>
+      <div class="ba-row">✓ <span class="ar">انشر مباشرة</span><span class="en">Publish directly</span></div>
+      <div class="ba-time">
+        <div class="ba-t-val ar">أقل من دقيقة</div>
+        <div class="ba-t-val en">&lt;1 minute</div>
+        <div class="ba-t-lbl ar">لكل حلقة</div>
+        <div class="ba-t-lbl en">per episode</div>
+      </div>
     </div>
-  </div>
-</section>
-
-<!-- CTA STRIP -->
-<section>
-  <div class="cta-strip reveal">
-    <div class="cta-stat"><div class="cta-stat-val">3</div><div class="cta-stat-label">تحويلات مجانية</div><div class="cta-stat-label">في الخطة المجانية</div></div>
-    <div class="cta-middle"><div class="cta-middle-title">ابدأ الآن مجاناً</div><div class="cta-middle-sub">حوّل حلقتك الأولى إلى مقاطع احترافية الآن</div></div>
-    <div class="cta-stat"><div class="cta-stat-val">60</div><div class="cta-stat-label">دقيقة مجانية</div><div class="cta-stat-label">عند التسجيل</div></div>
   </div>
 </section>
 
 <!-- TESTIMONIALS -->
-<section>
-  <div class="section-head reveal">
-    <div class="section-tag">● موثوق من قِبل صناع المحتوى</div>
-    <div class="section-title">ماذا يقولون عن LuP</div>
-  </div>
+<section class="section">
+  <div class="s-label reveal ar">ماذا يقولون</div>
+  <div class="s-label reveal en">What they say</div>
+  <h2 class="s-h2 reveal ar">صناع المحتوى<br><em>يثقون بـ Podlup</em></h2>
+  <h2 class="s-h2 reveal en">Content creators<br><em>trust Podlup</em></h2>
   <div class="testi-grid">
     <div class="testi-card reveal">
-      <div class="stars">★★★★★</div>
-      <div class="testi-text">"وفّر علينا ساعات طويلة في المونتاج، والمقاطع تطلع بجودة عالية!"</div>
-      <div class="testi-author"><div class="testi-avatar" style="background:#E8A84C20;border:1px solid #E8A84C35;color:#E8A84C;">ع</div><div><div class="testi-name">عبدالله السيبعي</div><div class="testi-role">مقدم بودكاست</div></div></div>
+      <div class="t-stars">★★★★★</div>
+      <div class="t-quote ar">"وفّر علينا أكثر من 6 ساعات أسبوعياً. المقاطع أفضل مما كنا نصنعه يدوياً."</div>
+      <div class="t-quote en">"Saved us 6+ hours weekly. The clips come out better than what we made manually."</div>
+      <div class="t-author">
+        <div class="t-av">ع</div>
+        <div><div class="t-name ar">عبدالله السيبعي</div><div class="t-name en">Abdullah Al-Sibaie</div><div class="t-role ar">مقدم بودكاست · 240K متابع</div><div class="t-role en">Podcast host · 240K followers</div></div>
+      </div>
     </div>
-    <div class="testi-card reveal">
-      <div class="stars">★★★★★</div>
-      <div class="testi-text">"LuP يفهم المحتوى العربي أفضل من أي أداة جربتها."</div>
-      <div class="testi-author"><div class="testi-avatar" style="background:#E84C8A20;border:1px solid #E84C8A35;color:#E84C8A;">س</div><div><div class="testi-name">سارة الحربي</div><div class="testi-role">صانعة محتوى</div></div></div>
+    <div class="testi-card reveal d1">
+      <div class="t-stars">★★★★★</div>
+      <div class="t-quote ar">"Podlup يفهم السياق الخليجي. الأدوات الأجنبية ما كانت تعطيني نفس النتيجة."</div>
+      <div class="t-quote en">"Podlup understands Gulf context. Foreign tools never gave me the same result."</div>
+      <div class="t-author">
+        <div class="t-av">س</div>
+        <div><div class="t-name ar">سارة الحربي</div><div class="t-name en">Sara Al-Harbi</div><div class="t-role ar">صانعة محتوى · 180K متابع</div><div class="t-role en">Content creator · 180K followers</div></div>
+      </div>
     </div>
-    <div class="testi-card reveal">
-      <div class="stars">★★★★★</div>
-      <div class="testi-text">"أهم ما يميز LuP السرعة والدقة في اختيار اللحظات."</div>
-      <div class="testi-author"><div class="testi-avatar" style="background:#4C8AE820;border:1px solid #4C8AE835;color:#4C8AE8;">ف</div><div><div class="testi-name">فهد العتيبي</div><div class="testi-role">مقدم بودكاست</div></div></div>
-    </div>
-  </div>
-</section>
-
-<!-- PRICING -->
-<section id="pricing">
-  <div class="section-head reveal">
-    <div class="section-tag">● الأسعار</div>
-    <div class="section-title">بسيط وواضح</div>
-    <div class="section-sub">أول حلقتين مجاناً — لا بطاقة ائتمانية</div>
-  </div>
-  <div class="plans-grid">
-    <div class="plan-card reveal">
-      <div><div class="plan-name">LuP Clips</div><div class="plan-price"><span class="plan-price-val">99</span><span class="plan-price-unit">ريال / شهر</span></div><div class="plan-desc">4 حلقات/شهر · 16 مقطع</div></div>
-      <div class="plan-feats"><div class="plan-feat"><span class="plan-feat-check">✓</span> كابشن عربي تلقائي</div><div class="plan-feat"><span class="plan-feat-check">✓</span> 3 منصات</div><div class="plan-feat"><span class="plan-feat-check">✓</span> تصدير HD</div></div>
-      <button class="plan-btn plan-btn-ghost">اختر الخطة</button>
-    </div>
-    <div class="plan-card hot reveal">
-      <div class="plan-hot-badge">⭐ الأكثر طلباً</div>
-      <div><div class="plan-name">LuP Dub</div><div class="plan-price"><span class="plan-price-val">149</span><span class="plan-price-unit">ريال / شهر</span></div><div class="plan-desc">12 حلقة/شهر · 48 مقطع</div></div>
-      <div class="plan-feats"><div class="plan-feat"><span class="plan-feat-check">✓</span> كل مميزات Clips</div><div class="plan-feat"><span class="plan-feat-check">✓</span> ترجمة صوتية خليجية</div><div class="plan-feat"><span class="plan-feat-check">✓</span> أولوية المعالجة</div><div class="plan-feat"><span class="plan-feat-check">✓</span> دعم مباشر</div></div>
-      <button class="plan-btn plan-btn-main">ابدأ الآن</button>
-    </div>
-    <div class="plan-card reveal">
-      <div><div class="plan-name">LuP Pro</div><div class="plan-price"><span class="plan-price-val">199</span><span class="plan-price-unit">ريال / شهر</span></div><div class="plan-desc">غير محدود · ∞ مقطع</div></div>
-      <div class="plan-feats"><div class="plan-feat"><span class="plan-feat-check">✓</span> كل المميزات</div><div class="plan-feat"><span class="plan-feat-check">✓</span> API خاص</div><div class="plan-feat"><span class="plan-feat-check">✓</span> مدير حساب مخصص</div><div class="plan-feat"><span class="plan-feat-check">✓</span> تقارير شهرية</div></div>
-      <button class="plan-btn plan-btn-ghost">اختر الخطة</button>
+    <div class="testi-card reveal d2">
+      <div class="t-stars">★★★★★</div>
+      <div class="t-quote ar">"أول مقطع طلع من Podlup وصل 900 ألف مشاهدة. كان في الدقيقة 44 وما كنا راح نلتفت له."</div>
+      <div class="t-quote en">"The first clip Podlup extracted reached 900K views. It was at minute 44 and we'd never have caught it."</div>
+      <div class="t-author">
+        <div class="t-av">ف</div>
+        <div><div class="t-name ar">فهد العتيبي</div><div class="t-name en">Fahad Al-Otaibi</div><div class="t-role ar">مقدم بودكاست · 320K متابع</div><div class="t-role en">Podcast host · 320K followers</div></div>
+      </div>
     </div>
   </div>
 </section>
 
 <!-- FINAL CTA -->
-<section>
-  <div class="final-cta reveal">
-    <div class="final-title">جاهز تطلع لُب كل حلقة؟</div>
-    <div class="final-sub">أول 100 بودكاستر يحصلون على شهر كامل مجاناً</div>
-    <div class="email-row">
-      <input class="email-input" id="email-input" type="email" placeholder="بريدك الإلكتروني">
-      <button class="btn-main" style="padding:13px 22px;" onclick="joinWaitlist()">انضم الآن</button>
-    </div>
-    <div class="join-success" id="join-success">✅ تم تسجيلك — ستكون من أوائل من يجرب LuP</div>
-    <div class="final-note">لا رسائل مزعجة · إلغاء في أي وقت</div>
+<section class="cta-section" id="cta">
+  <div class="cta-bg-text" aria-hidden="true">Podlup</div>
+  <div class="cta-eyebrow ar">ابدأ الآن · مجاناً</div>
+  <div class="cta-eyebrow en">Start now · Free</div>
+  <h2 class="cta-h2 ar">جاهز تطلع<br>لُب كل حلقة؟</h2>
+  <h2 class="cta-h2 en">Ready to extract<br>the best every time?</h2>
+  <p class="cta-sub ar">أول 100 بودكاستر يحصلون على شهر Pro مجاناً</p>
+  <p class="cta-sub en">First 100 podcasters get a free Pro month</p>
+  <div class="cta-form">
+    <input class="cta-email" id="ctaEmail" type="email" placeholder="your@email.com">
+    <button class="cta-submit" onclick="joinNow()">
+      <span class="ar">انضم الآن</span>
+      <span class="en">Join now</span>
+    </button>
   </div>
+  <div class="cta-success" id="ctaOk">
+    <span class="ar">✅ تم تسجيلك — تجربتك المجانية في طريقها إليك</span>
+    <span class="en">✅ Registered — your free trial is on its way</span>
+  </div>
+  <p class="cta-note ar">لا رسائل مزعجة · إلغاء في أي وقت</p>
+  <p class="cta-note en">No spam · Cancel anytime</p>
 </section>
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-inner">
-    <div class="footer-logo">Lu<span>P</span><span class="star">✦</span></div>
-    <div class="footer-links">
-      <a href="#" class="footer-link">YouTube</a>
-      <a href="#" class="footer-link">TikTok</a>
-      <a href="#" class="footer-link">X</a>
-      <a href="#" class="footer-link">Instagram</a>
-    </div>
-    <div class="footer-copy">العربي للعربي · جميع الحقوق محفوظة © 2026</div>
+  <div class="f-logo">
+    <svg class="brand-mark" width="36" height="36" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <rect x="4" y="4" width="56" height="56" rx="18" fill="rgba(94,113,106,.10)"/>
+      <path d="M20 48V24.5C20 16.5 26.5 11 34.6 11C43 11 50 17.4 50 26C50 34.6 43 41 34.6 41H28.8" stroke="#38433F" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M28.8 41C23.5 41 20 37.2 20 32" stroke="#5E716A" stroke-width="7.5" stroke-linecap="round"/>
+      <circle cx="35" cy="26" r="7.2" fill="#FF5A2A"/>
+      <circle cx="35" cy="26" r="13" stroke="#9EA9A5" stroke-width="1.5" opacity=".45"/>
+    </svg>
+    <div class="f-wordmark"><span class="pod">Pod</span><span class="lup">lup</span></div>
   </div>
+  <div class="f-links">
+    <a href="#" class="f-link">TikTok</a>
+    <a href="#" class="f-link">Instagram</a>
+    <a href="#" class="f-link">X</a>
+    <a href="#" class="f-link">YouTube</a>
+  </div>
+  <div class="f-copy ar">© 2026 Podlup · العربي للعربي</div>
+  <div class="f-copy en">© 2026 Podlup · For Arabic Podcasters</div>
 </footer>
 
 <script>
-// PARTICLES
-const canvas=document.getElementById('particles');
-const ctx=canvas.getContext('2d');
-function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
-resizeCanvas();
-window.addEventListener('resize',resizeCanvas);
-const pts=Array.from({length:60},()=>({x:Math.random()*canvas.width,y:Math.random()*canvas.height,vx:(Math.random()-.5)*.25,vy:(Math.random()-.5)*.25,r:Math.random()*.9+.2,a:Math.random()*.35+.08}));
-function drawParticles(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  pts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=canvas.width;if(p.x>canvas.width)p.x=0;if(p.y<0)p.y=canvas.height;if(p.y>canvas.height)p.y=0;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=`rgba(201,168,76,${p.a})`;ctx.fill();});
-  for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<90){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle=`rgba(201,168,76,${.06*(1-d/90)})`;ctx.lineWidth=.5;ctx.stroke();}}
-  requestAnimationFrame(drawParticles);
+// LANG TOGGLE
+let lang='ar';
+function toggleLang(){
+  lang=lang==='ar'?'en':'ar';
+  const html=document.documentElement;
+  html.setAttribute('data-lang',lang);
+  html.setAttribute('lang',lang);
+  html.setAttribute('dir',lang==='ar'?'rtl':'ltr');
+  document.getElementById('langBtn').textContent=lang==='ar'?'EN':'عر';
 }
-drawParticles();
 
 // NAV SCROLL
-window.addEventListener('scroll',()=>{document.getElementById('nav').classList.toggle('scrolled',window.scrollY>50);});
-
-// WAVEFORM
-const wf=document.getElementById('waveform');
-for(let i=0;i<34;i++){const b=document.createElement('div');b.className='wbar';b.style.animationDelay=`${i*0.04}s`;b.style.animationDuration=`${0.6+Math.random()*.8}s`;wf.appendChild(b);}
-
-// TYPEWRITER
-const tw=['خلال دقيقة واحدة ⚡','بكابشن عربي تلقائي ✍️','لكل منصة بضغطة واحدة 📲','لكن تأثيرها يعجبك ✦'];
-let twIdx=0,twTxt='',twDel=false;
-const twEl=document.getElementById('tw-line');
-function typeWriter(){
-  const w=tw[twIdx];
-  if(!twDel){if(twTxt.length<w.length){twTxt=w.slice(0,twTxt.length+1);twEl.innerHTML=twTxt+'<span class="tw-cursor"></span>';setTimeout(typeWriter,60);}else{setTimeout(()=>{twDel=true;typeWriter();},1800);}}
-  else{if(twTxt.length>0){twTxt=twTxt.slice(0,-1);twEl.innerHTML=twTxt+'<span class="tw-cursor"></span>';setTimeout(typeWriter,30);}else{twIdx=(twIdx+1)%tw.length;twDel=false;typeWriter();}}
-}
-typeWriter();
-
-// DEMO CLIPS
-const clips=[
-  {score:97,title:'تركت وظيفتي بعد 7 سنوات — وما ندمت لحظة',time:'04:12←05:08 · 56ث',pl:[{n:'سناب',c:'#FFFC00'},{n:'تيك توك',c:'#FF0050'}],views:'1.2M'},
-  {score:94,title:'السر اللي ما يقوله أحد عن النجاح الحقيقي',time:'18:34←19:41 · 67ث',pl:[{n:'تيك توك',c:'#FF0050'},{n:'إنستا',c:'#E1306C'}],views:'880K'},
-  {score:91,title:'خسرت كل شيء وعمري 23 — أحسن شيء صار لي',time:'31:05←32:10 · 65ث',pl:[{n:'سناب',c:'#FFFC00'},{n:'إنستا',c:'#E1306C'},{n:'تيك',c:'#FF0050'}],views:'2.4M'},
-];
-let cIdx=0;
-const dotsEl=document.getElementById('demo-dots');
-clips.forEach((_,i)=>{const d=document.createElement('div');d.className='ddot'+(i===0?' active':'');d.style.width=i===0?'16px':'5px';dotsEl.appendChild(d);});
-function updateClip(){
-  const cr=document.getElementById('clip-result');
-  cr.classList.add('fade');
-  setTimeout(()=>{
-    const c=clips[cIdx];
-    document.getElementById('clip-score').textContent=c.score;
-    document.getElementById('clip-title').textContent=c.title;
-    document.getElementById('clip-time').textContent=c.time;
-    document.getElementById('clip-views').textContent='👁 '+c.views;
-    const pEl=document.getElementById('clip-platforms');
-    pEl.innerHTML='';
-    c.pl.forEach(p=>{const t=document.createElement('span');t.className='ptag';t.style.color=p.c;t.style.background=p.c+'15';t.style.borderColor=p.c+'30';t.textContent=p.n;pEl.appendChild(t);});
-    document.querySelectorAll('.ddot').forEach((d,i)=>{d.classList.toggle('active',i===cIdx);d.style.width=i===cIdx?'16px':'5px';});
-    cr.classList.remove('fade');
-  },280);
-  cIdx=(cIdx+1)%clips.length;
-}
-setInterval(updateClip,2800);
-
-// COUNTERS
-const counters=[
-  {id:'s1',to:4.9,suffix:'/5',dec:1},
-  {id:'s2',to:850,suffix:'+',dec:0},
-  {id:'s3',to:12000,suffix:'+',dec:0},
-  {id:'s4',to:1.2,suffix:'M+',dec:1},
-];
-let counted=false;
-function runCounters(){
-  if(counted)return;counted=true;
-  counters.forEach(c=>{
-    const el=document.getElementById(c.id);
-    let cur=0;const step=c.to/55;
-    const t=setInterval(()=>{cur+=step;if(cur>=c.to){el.textContent=(c.to%1===0?c.to:c.to.toFixed(c.dec))+c.suffix;clearInterval(t);}else{el.textContent=(cur%1===0?Math.floor(cur):cur.toFixed(c.dec))+c.suffix;}},22);
-  });
-}
+window.addEventListener('scroll',()=>{
+  document.getElementById('mainNav').classList.toggle('solid',window.scrollY>60);
+},{passive:true});
 
 // SCROLL REVEAL
-const reveals=document.querySelectorAll('.reveal');
 const obs=new IntersectionObserver(entries=>{
-  entries.forEach(e=>{
-    if(e.isIntersecting){
-      e.target.classList.add('visible');
-      if(e.target.closest('.stats-grid')||e.target===document.querySelector('.stats-grid'))runCounters();
-    }
-  });
-},{threshold:.12});
-reveals.forEach(r=>obs.observe(r));
+  entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('visible');});
+},{threshold:.1});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
 
-// Stats counter trigger on scroll
-const statsObs=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting)runCounters();});},{threshold:.3});
-document.querySelector('.stats-grid')&&statsObs.observe(document.querySelector('.stats-grid'));
-
-// JOIN WAITLIST
-function joinWaitlist(){
-  const email=document.getElementById('email-input').value;
-  if(!email.includes('@'))return;
-  document.querySelector('.email-row').style.display='none';
-  const s=document.getElementById('join-success');
-  s.style.display='block';
+// DISCOUNT
+const codes={PODLUP20:20,VIP20:20,FANJAN20:20,LAUNCH30:30,THMANYAH20:20};
+function applyCode(){
+  const code=document.getElementById('dInput').value.toUpperCase().trim();
+  const msg=document.getElementById('dMsg');
+  if(codes[code]){
+    msg.className='d-msg ok';
+    msg.textContent=lang==='ar'?`✅ تم تطبيق خصم ${codes[code]}% على باقتك`:`✅ ${codes[code]}% discount applied`;
+  } else {
+    msg.className='d-msg err';
+    msg.textContent=lang==='ar'?'الكود غير صحيح — تحقق وحاول مجدداً':'Invalid code — please check and try again';
+  }
+  msg.style.display='block';
 }
-document.getElementById('email-input').addEventListener('keydown',e=>{if(e.key==='Enter')joinWaitlist();});
+document.getElementById('dInput').addEventListener('keydown',e=>{if(e.key==='Enter')applyCode();});
+
+// JOIN CTA
+function joinNow(){
+  const email=document.getElementById('ctaEmail').value;
+  if(!email.includes('@'))return;
+  document.querySelector('.cta-form').style.display='none';
+  document.getElementById('ctaOk').style.display='block';
+}
+document.getElementById('ctaEmail').addEventListener('keydown',e=>{if(e.key==='Enter')joinNow();});
+
+function scrollCTA(){document.getElementById('cta').scrollIntoView({behavior:'smooth'});}
 
 // SMOOTH SCROLL
-document.querySelectorAll('a[href^="#"]').forEach(a=>{a.addEventListener('click',e=>{e.preventDefault();const t=document.querySelector(a.getAttribute('href'));if(t)t.scrollIntoView({behavior:'smooth'});});});
+document.querySelectorAll('a[href^="#"]').forEach(a=>{
+  a.addEventListener('click',e=>{
+    e.preventDefault();
+    const t=document.querySelector(a.getAttribute('href'));
+    if(t)t.scrollIntoView({behavior:'smooth'});
+  });
+});
 </script>
 </body>
 </html>
