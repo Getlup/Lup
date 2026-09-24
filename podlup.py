@@ -30,6 +30,10 @@ import urllib.request
 
 VERSION = "3.0"
 FONT_CANDIDATES_BOLD = [
+    # Linux (Railway/Render container) — يثبَّت عبر Dockerfile
+    "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansArabic-Bold.ttf",
+    # macOS (تشغيل محلي)
     "/System/Library/Fonts/Supplemental/GeezaPro-Bold.ttf",
     "/System/Library/Fonts/SFArabicRounded.ttf",
     "/System/Library/Fonts/SFArabic.ttf",
@@ -37,6 +41,10 @@ FONT_CANDIDATES_BOLD = [
     "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
 ]
 FONT_CANDIDATES = [
+    # Linux (Railway/Render container)
+    "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+    # macOS (تشغيل محلي)
     "/System/Library/Fonts/SFArabic.ttf",
     "/System/Library/Fonts/GeezaPro.ttc",
     "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
@@ -768,23 +776,29 @@ async def index():
 
 # ══════════════ MAIN ══════════════
 if __name__ == "__main__":
-    # فحص المنفذ قبل التشغيل
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        s.bind(("0.0.0.0", 8000))
-        s.close()
-    except OSError:
-        s.close()
-        print("❌ المنفذ 8000 مشغول بسيرفر قديم. أوقفه أولاً بهذا الأمر:")
-        print("   kill $(lsof -ti:8000)")
-        print("ثم أعد تشغيل هذا الملف.")
-        sys.exit(1)
+    # Railway/Render يحددان رقم المنفذ عبر متغير البيئة PORT
+    # محلياً (على جهازك) هذا المتغير غير موجود، فنستخدم 8000 كافتراضي
+    PORT = int(os.environ.get("PORT", 8000))
+    IS_CLOUD = "PORT" in os.environ
+
+    if not IS_CLOUD:
+        # فحص المنفذ قبل التشغيل — محلياً فقط
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.bind(("0.0.0.0", PORT))
+            s.close()
+        except OSError:
+            s.close()
+            print(f"❌ المنفذ {PORT} مشغول بسيرفر قديم. أوقفه أولاً بهذا الأمر:")
+            print(f"   kill $(lsof -ti:{PORT})")
+            print("ثم أعد تشغيل هذا الملف.")
+            sys.exit(1)
 
     import uvicorn
     print("=" * 46)
     print(f"🎬 Podlup v{VERSION} — كل شيء في ملف واحد")
     print("=" * 46)
-    print("افتح المتصفح على:  http://localhost:8000")
+    print(f"افتح المتصفح على:  http://localhost:{PORT}" if not IS_CLOUD else "🚀 يعمل على الاستضافة السحابية")
     print("(الواجهة مدمجة — لا حاجة لأي ملف HTML)")
     print("=" * 46)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
