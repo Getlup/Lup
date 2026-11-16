@@ -1,15 +1,19 @@
 """
-Podlup v3.0 — ملف واحد: السيرفر + الواجهة معاً
+Podlup v3.1 — ملف واحد: السيرفر + الواجهة معاً
 التشغيل:  python3 podlup.py
 الفتح:    http://localhost:8000
+
+المفاتيح تُقرأ من متغيرات البيئة فقط (انظر .env.example):
+  GROQ_API_KEY, OPENROUTER_API_KEY
 """
 
-import os, sys, json, subprocess, tempfile, shutil, re, socket
+import os, sys, json, subprocess, tempfile, shutil, re, socket, time, threading, logging, uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 # ── فحص المكتبات ──
 try:
-    from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+    from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
     from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
     from fastapi.middleware.cors import CORSMiddleware
 except ImportError:
@@ -27,8 +31,12 @@ except ImportError:
     sys.exit(1)
 
 import urllib.request
+import urllib.error
 
-VERSION = "3.0"
+VERSION = "3.1"
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger("podlup")
+
 FONT_CANDIDATES_BOLD = [
     # Linux (Railway/Render container) — يثبَّت عبر Dockerfile
     "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Bold.ttf",
@@ -50,8 +58,122 @@ FONT_CANDIDATES = [
     "/System/Library/Fonts/Supplemental/GeezaPro.ttc",
 ]
 
-app = FastAPI(title=f"Podlup v{VERSION}")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+CAPTION_MODES = ("none", "normal", "focus")
+SESSION_RE = re.compile(r"^podlup_[A-Za-z0-9_]{4,40}$")
+USER_AGENT = "podlup/" + VERSION
+
+
+# ══════════════ الإعدادات (من متغيرات البيئة فقط) ══════════════
+def _env_num(name: str, default, cast=int):
+    try:
+        return cast(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return cast(default)
+
+
+def groq_key() -> str:
+    return os.environ.get("GROQ_API_KEY", "").strip()
+
+
+def openrouter_key() -> str:
+    return os.environ.get("OPENROUTER_API_KEY", "").strip()
+
+
+def keys_ok() -> bool:
+    return bool(groq_key() and openrouter_key())
+
+
+def max_upload_bytes() -> int:
+    return _env_num("MAX_UPLOAD_MB", 2048) * 1024 * 1024
+
+
+def max_duration_sec() -> int:
+    return _env_num("MAX_DURATION_MIN", 150) * 60
+
+
+def session_ttl_sec() -> float:
+    return _env_num("SESSION_TTL_HOURS", 6, float) * 3600
+
+
+def allowed_origins() -> list:
+    raw = os.environ.get("ALLOWED_ORIGINS", "https://podlup.com,https://app.podlup.com")
+    origins = [o.strip() for o in raw.split(",") if o.strip()]
+    if "PORT" not in os.environ:  # تشغيل محلي
+        local = f"http://localhost:{os.environ.get('PORT', 8000)}"
+        if local not in origins:
+            origins.append(local)
+    return origins
+
+
+class UserError(Exception):
+    """خطأ رسالته آمنة وتُعرض للمستخدم كما هي."""
+    def __init__(self, message: str, status: int = 400):
+        super().__init__(message)
+        self.status = status
+
+
+# ══════════════ تنظيف الجلسات المؤقتة ══════════════
+def cleanup_sessions(base_dir: str = None, ttl_sec: float = None, now: float = None) -> list:
+    """يحذف مجلدات podlup_* الأقدم من المدة المسموحة. يرجع أسماء المحذوف."""
+    base = Path(base_dir or tempfile.gettempdir())
+    ttl = session_ttl_sec() if ttl_sec is None else ttl_sec
+    now = time.time() if now is None else now
+    removed = []
+    for d in base.glob("podlup_*"):
+        try:
+            if d.is_dir() and not d.is_symlink() and now - d.stat().st_mtime > ttl:
+                shutil.rmtree(d, ignore_errors=True)
+                removed.append(d.name)
+        except OSError:
+            continue
+    if removed:
+        log.info("تنظيف: حُذفت %d جلسة منتهية", len(removed))
+    return removed
+
+
+_stop_cleaner = threading.Event()
+
+
+def _cleaner_loop():
+    while True:
+        try:
+            cleanup_sessions()
+        except Exception:
+            log.exception("فشل تنظيف الجلسات")
+        if _stop_cleaner.wait(1800):
+            return
+
+
+@asynccontextmanager
+async def lifespan(_app):
+    if not keys_ok():
+        log.error("GROQ_API_KEY و/أو OPENROUTER_API_KEY غير مضبوطة — التحليل لن يعمل (/health يرجع keys:false)")
+    _stop_cleaner.clear()
+    t = threading.Thread(target=_cleaner_loop, daemon=True, name="podlup-cleaner")
+    t.start()
+    yield
+    _stop_cleaner.set()
+
+
+app = FastAPI(title=f"Podlup v{VERSION}", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(), allow_methods=["GET", "POST"], allow_headers=["*"])
+
+
+@app.middleware("http")
+async def reject_oversized(request: Request, call_next):
+    """رفض مبكر عبر Content-Length قبل قراءة الجسم كاملاً."""
+    if request.method == "POST" and request.url.path == "/analyze":
+        try:
+            declared = int(request.headers.get("content-length", "0"))
+        except ValueError:
+            declared = 0
+        if declared > max_upload_bytes() + 1024 * 1024:
+            return JSONResponse({"detail": _too_big_msg()}, status_code=413)
+    return await call_next(request)
+
+
+def _too_big_msg() -> str:
+    return f"حجم الملف يتجاوز الحد المسموح ({max_upload_bytes() // (1024 * 1024)}MB). ضغّط الملف أو ارفع جزءاً منه."
 
 
 def load_font(size: int, bold: bool = True):
@@ -72,44 +194,143 @@ def load_font(size: int, bold: bool = True):
     return ImageFont.load_default()
 
 
-def run_cmd(cmd, cwd=None):
-    return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
+def run_cmd(cmd, cwd=None, timeout=None):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise UserError("انتهت مهلة المعالجة. جرّب ملفاً أقصر.", 504)
 
 
-# ══════════════ AUDIO EXTRACTION ══════════════
+# ══════════════ AUDIO ══════════════
+def probe_duration(path: str) -> float:
+    r = run_cmd(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=nw=1:nk=1", path], timeout=60)
+    try:
+        d = float(r.stdout.strip())
+    except ValueError:
+        log.error("ffprobe فشل: %s", r.stderr[-300:])
+        raise UserError("تعذّر قراءة الملف. تأكد أنه ملف صوت أو فيديو سليم.")
+    if d <= 0:
+        raise UserError("الملف فارغ أو مدته صفر.")
+    return d
+
+
 def extract_audio(input_name: str, work_dir: str) -> str:
     """يستخرج صوتاً مضغوطاً من الفيديو ليقبله Groq مهما كان حجم الفيديو"""
     audio_name = "audio.m4a"
     r = run_cmd(["ffmpeg", "-y", "-i", input_name, "-vn", "-ac", "1",
-                 "-c:a", "aac", "-b:a", "48k", audio_name], cwd=work_dir)
+                 "-c:a", "aac", "-b:a", "48k", audio_name], cwd=work_dir, timeout=3600)
     if r.returncode != 0:
-        raise RuntimeError(f"فشل استخراج الصوت: {r.stderr[-300:]}")
+        log.error("فشل استخراج الصوت: %s", r.stderr[-500:])
+        raise UserError("تعذّر استخراج الصوت من الملف. تأكد أنه ملف سليم.")
     return audio_name
 
 
-# ══════════════ TRANSCRIBE ══════════════
-def transcribe(audio_name: str, groq_key: str, work_dir: str) -> dict:
-    cmd = ["curl", "-s",
-           "https://api.groq.com/openai/v1/audio/transcriptions",
-           "-H", f"Authorization: Bearer {groq_key}",
-           "-F", "model=whisper-large-v3",
-           "-F", "language=ar",
-           "-F", "response_format=verbose_json",
-           "-F", f"file=@{audio_name}"]
-    r = run_cmd(cmd, cwd=work_dir)
-    if r.returncode != 0:
-        raise RuntimeError(f"فشل الاتصال بـ Groq: {r.stderr[:200]}")
+# ══════════════ HTTP مساعدات ══════════════
+def _multipart(fields: dict, file_field: str, filename: str, file_bytes: bytes):
+    boundary = uuid.uuid4().hex
+    parts = []
+    for k, v in fields.items():
+        parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode())
+    parts.append((f'--{boundary}\r\nContent-Disposition: form-data; name="{file_field}"; '
+                  f'filename="{filename}"\r\nContent-Type: application/octet-stream\r\n\r\n').encode())
+    parts.append(file_bytes)
+    parts.append(f"\r\n--{boundary}--\r\n".encode())
+    return b"".join(parts), f"multipart/form-data; boundary={boundary}"
+
+
+def _error_text(e: "urllib.error.HTTPError") -> str:
     try:
-        data = json.loads(r.stdout)
+        body = json.loads(e.read())
+        err = body.get("error", body)
+        return err.get("message", str(err)) if isinstance(err, dict) else str(err)
+    except Exception:
+        return f"HTTP {e.code}"
+
+
+# ══════════════ TRANSCRIBE ══════════════
+def transcribe(audio_name: str, work_dir: str) -> dict:
+    key = groq_key()
+    if not key:
+        raise UserError("الخدمة غير مهيّأة (مفتاح التفريغ مفقود).", 503)
+    with open(os.path.join(work_dir, audio_name), "rb") as f:
+        audio = f.read()
+    body, ctype = _multipart(
+        {"model": "whisper-large-v3", "language": "ar", "response_format": "verbose_json"},
+        "file", audio_name, audio)
+    req = urllib.request.Request(
+        "https://api.groq.com/openai/v1/audio/transcriptions", data=body,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": ctype, "User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=_env_num("GROQ_TIMEOUT_SEC", 600)) as r:
+            data = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        log.error("Groq HTTP %s: %s", e.code, _error_text(e))
+        raise UserError("فشل التفريغ الصوتي. حاول لاحقاً، وإن تكرر الخطأ فالملف قد يكون كبيراً جداً.", 502)
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        log.error("Groq اتصال: %s", e)
+        raise UserError("تعذّر الاتصال بخدمة التفريغ أو انتهت المهلة. حاول مرة أخرى.", 504)
     except json.JSONDecodeError:
-        raise RuntimeError(f"رد غير متوقع من Groq: {r.stdout[:300]}")
+        raise UserError("رد غير متوقع من خدمة التفريغ.", 502)
     if "error" in data:
-        raise RuntimeError(f"خطأ Groq: {data['error'].get('message', data['error'])}")
+        log.error("Groq خطأ: %s", data["error"])
+        raise UserError("خطأ من خدمة التفريغ الصوتي.", 502)
     return data
 
 
+# ══════════════ OpenRouter ══════════════
+def parse_json_content(content: str):
+    """يحلل رد GPT حتى لو لُفّ بأسوار ``` أو نص زائد."""
+    text = (content or "").strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.MULTILINE).strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        m = re.search(r"\{.*\}", text, flags=re.DOTALL)
+        if m:
+            return json.loads(m.group(0))
+        raise
+
+
+def openrouter_json(messages: list, timeout: int = None):
+    """طلب JSON من OpenRouter مع محاولة إعادة واحدة. يرجع الكائن المحلَّل."""
+    key = openrouter_key()
+    if not key:
+        raise UserError("الخدمة غير مهيّأة (مفتاح التحليل مفقود).", 503)
+    timeout = timeout or _env_num("OPENROUTER_TIMEOUT_SEC", 120)
+    payload = json.dumps({
+        "model": "openai/gpt-4o",
+        "messages": messages,
+        "response_format": {"type": "json_object"},
+    }).encode()
+    last = None
+    for attempt in (1, 2):
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions", data=payload,
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json",
+                     "User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                result = json.loads(r.read())
+            return parse_json_content(result["choices"][0]["message"]["content"])
+        except urllib.error.HTTPError as e:
+            last = f"HTTP {e.code}: {_error_text(e)}"
+            if e.code in (400, 401, 402, 403):  # لا فائدة من الإعادة
+                break
+        except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError,
+                KeyError, IndexError, TypeError, ValueError) as e:
+            last = repr(e)
+        log.warning("OpenRouter محاولة %d فشلت: %s", attempt, last)
+    log.error("OpenRouter فشل: %s", last)
+    raise UserError("تعذّر تحليل النص حالياً. حاول مرة أخرى.", 502)
+
+
 # ══════════════ ANALYZE ══════════════
-def analyze(segments: list, or_key: str, count: int = 3) -> list:
+def analyze(segments: list, count: int = 3) -> list:
     transcript_text = "\n".join(f"[{s['id']}] {s['text'].strip()}" for s in segments)
     system_prompt = (
         "أنت محرر محتوى محترف متخصص في اختيار أقوى لحظات البودكاست العربي لمنصات التيك توك والسناب شات وإنستغرام ريلز. "
@@ -119,50 +340,106 @@ def analyze(segments: list, or_key: str, count: int = 3) -> list:
         "مهم جداً: end_id يجب أن يكون آخر جملة في الفكرة وليس أول جملة في الفكرة التالية — إذا شككت اختر الجملة السابقة. "
         'أجب بـ JSON فقط: {"clips":[{"start_id":0,"end_id":0,"title":"","caption":"","score":0,"reason":""}]}'
     )
-    payload = json.dumps({
-        "model": "openai/gpt-4o",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": transcript_text}
-        ]
-    }).encode()
-    req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions", data=payload,
-        headers={"Authorization": f"Bearer {or_key}", "Content-Type": "application/json"})
-    with urllib.request.urlopen(req) as r:
-        result = json.loads(r.read())
-    content = result["choices"][0]["message"]["content"].strip().replace("```json", "").replace("```", "").strip()
-    return json.loads(content)["clips"]
+    obj = openrouter_json([
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": transcript_text},
+    ])
+    clips = obj.get("clips") if isinstance(obj, dict) else None
+    if not isinstance(clips, list):
+        raise UserError("رد التحليل غير مكتمل. حاول مرة أخرى.", 502)
+    return clips
+
+
+def _as_int(v):
+    """يقبل الأعداد الصحيحة ونصوصها فقط (لا bool ولا كسور)."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float) and v.is_integer():
+        return int(v)
+    if isinstance(v, str) and v.strip().isdigit():
+        return int(v.strip())
+    return None
+
+
+def extend_clip(sid: int, eid: int, seg_by_id: dict, all_ids: list, min_dur: float = 25):
+    """يمدّ المقطع بجمل لاحقة (ثم سابقة) حتى يبلغ min_dur ثانية."""
+    dur = seg_by_id[eid]["end"] - seg_by_id[sid]["start"]
+    while dur < min_dur:
+        nxt = next((i for i in all_ids if i > eid), None)
+        prv = next((i for i in reversed(all_ids) if i < sid), None)
+        if nxt is not None:
+            eid = nxt
+        elif prv is not None:
+            sid = prv
+        else:
+            break
+        dur = seg_by_id[eid]["end"] - seg_by_id[sid]["start"]
+    return sid, eid
+
+
+def _seg_public(s: dict) -> dict:
+    return {"id": s["id"], "text": s["text"].strip(), "start": s["start"], "end": s["end"]}
+
+
+def validate_clips(raw_clips, segments: list, count: int = 3, min_dur: float = 25) -> list:
+    """يتحقق من مقاطع GPT ويتجاهل غير الصالح منها بدل إفشال الطلب كله."""
+    if not isinstance(raw_clips, list):
+        return []
+    seg_by_id = {s["id"]: s for s in segments}
+    all_ids = sorted(seg_by_id.keys())
+    clips = []
+    for c in raw_clips:
+        if not isinstance(c, dict):
+            continue
+        sid, eid = _as_int(c.get("start_id")), _as_int(c.get("end_id"))
+        if sid is None or eid is None or sid > eid:
+            continue
+        if sid not in seg_by_id or eid not in seg_by_id:
+            continue
+        sid, eid = extend_clip(sid, eid, seg_by_id, all_ids, min_dur)
+        ss, es = seg_by_id[sid], seg_by_id[eid]
+        try:
+            score = int(round(float(c.get("score", 0))))
+        except (TypeError, ValueError):
+            score = 0
+        after_ids = [i for i in all_ids if i > eid][:8]
+        clips.append({
+            "title": str(c.get("title") or "")[:200],
+            "caption": str(c.get("caption") or "")[:1000],
+            "score": score,
+            "reason": str(c.get("reason") or "")[:500],
+            "start": round(ss["start"], 2),
+            "end": round(es["end"], 2),
+            "duration": round(es["end"] - ss["start"]),
+            "start_id": sid,
+            "end_id": eid,
+            "clip_segments": [_seg_public(s) for s in segments if sid <= s["id"] <= eid],
+            "after_segments": [_seg_public(seg_by_id[i]) for i in after_ids],
+        })
+        if len(clips) >= count:
+            break
+    return clips
 
 
 # ══════════════ KEYWORDS (دفعة واحدة) ══════════════
-def batch_keywords(texts: list, or_key: str) -> dict:
+def batch_keywords(texts: list) -> dict:
     """طلب واحد يستخرج الكلمات المفتاحية لكل الجمل دفعة واحدة"""
-    if not texts or not or_key:
+    if not texts or not openrouter_key():
         return {}
     numbered = "\n".join(f"{i}: {t}" for i, t in enumerate(texts))
-    payload = json.dumps({
-        "model": "openai/gpt-4o",
-        "messages": [{
+    try:
+        raw = openrouter_json([{
             "role": "user",
             "content": (
                 "لكل جملة مرقّمة أدناه، استخرج أهم 1-3 كلمات مفتاحية (الأكثر تأثيراً وجذباً للانتباه). "
                 'أجب بـ JSON فقط بدون أي نص آخر بهذا الشكل: {"0":["كلمة"],"1":["كلمة","كلمة"]}\n\n'
-                + numbered
-            )
-        }]
-    }).encode()
-    req = urllib.request.Request(
-        "https://openrouter.ai/api/v1/chat/completions", data=payload,
-        headers={"Authorization": f"Bearer {or_key}", "Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            result = json.loads(r.read())
-        content = result["choices"][0]["message"]["content"].strip().replace("```json", "").replace("```", "").strip()
-        raw = json.loads(content)
-        return {int(k): v for k, v in raw.items() if isinstance(v, list)}
+                + numbered)
+        }], timeout=60)
+        return {int(k): v for k, v in raw.items() if isinstance(v, list) and str(k).isdigit()}
     except Exception as e:
-        print(f"⚠️ keywords fallback: {e}")
+        log.warning("keywords fallback: %s", e)
         return {}
 
 
@@ -231,144 +508,140 @@ def make_caption_png(text: str, keywords: list, mode: str, out_path: str):
 
 # ══════════════ CUT CLIP ══════════════
 def cut_clip(input_name: str, start: float, end: float, out_name: str,
-             caption_mode: str, segments: list, or_key: str, work_dir: str):
+             caption_mode: str, segments: list, work_dir: str):
     duration = round(end - start, 2)
     fade_in, fade_out = 0.4, 0.2
     fade_out_start = round(max(0, duration - fade_out), 2)
     t1 = out_name + "_t1.mp4"
     t2 = out_name + "_t2.mp4"
+    pngs = []
 
-    # ── الخطوة ١: قص + عمودي 9:16 ──
-    r1 = run_cmd(["ffmpeg", "-y", "-i", input_name,
-                  "-ss", str(start), "-t", str(duration),
-                  "-c:v", "libx264", "-c:a", "aac",
-                  "-vf", "scale=1080:-2:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black",
-                  t1], cwd=work_dir)
-    if r1.returncode != 0:
-        raise RuntimeError(f"فشل القص: {r1.stderr[-300:]}")
+    try:
+        # ── الخطوة ١: قص + عمودي 9:16 ──
+        r1 = run_cmd(["ffmpeg", "-y", "-i", input_name,
+                      "-ss", str(start), "-t", str(duration),
+                      "-c:v", "libx264", "-c:a", "aac",
+                      "-vf", "scale=1080:-2:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black",
+                      t1], cwd=work_dir, timeout=900)
+        if r1.returncode != 0:
+            raise RuntimeError(f"فشل القص: {r1.stderr[-300:]}")
 
-    caption_input = t1
+        caption_input = t1
 
-    # ── الخطوة ٢: الكابشن (مرسوم بـ Python — يعمل مع أي نسخة FFmpeg) ──
-    if caption_mode in ("normal", "focus"):
-        clip_segs = [s for s in segments if s["end"] > start and s["start"] < end and s["text"].strip()]
+        # ── الخطوة ٢: الكابشن (مرسوم بـ Python — يعمل مع أي نسخة FFmpeg) ──
+        if caption_mode in ("normal", "focus"):
+            clip_segs = [s for s in segments if s["end"] > start and s["start"] < end and s["text"].strip()]
 
-        kw_map = {}
-        if caption_mode == "focus":
-            kw_map = batch_keywords([s["text"].strip() for s in clip_segs], or_key)
+            kw_map = {}
+            if caption_mode == "focus":
+                kw_map = batch_keywords([s["text"].strip() for s in clip_segs])
 
-        overlays = []
-        for idx, seg in enumerate(clip_segs):
-            png = f"{out_name}_cap{idx}.png"
-            res = make_caption_png(seg["text"].strip(), kw_map.get(idx, []), caption_mode,
-                                   os.path.join(work_dir, png))
-            if res:
-                s_rel = max(0, round(seg["start"] - start, 2))
-                e_rel = min(duration, round(seg["end"] - start, 2))
-                overlays.append((png, s_rel, e_rel, res[1]))
+            overlays = []
+            for idx, seg in enumerate(clip_segs):
+                png = f"{out_name}_cap{idx}.png"
+                pngs.append(png)
+                res = make_caption_png(seg["text"].strip(), kw_map.get(idx, []), caption_mode,
+                                       os.path.join(work_dir, png))
+                if res:
+                    s_rel = max(0, round(seg["start"] - start, 2))
+                    e_rel = min(duration, round(seg["end"] - start, 2))
+                    overlays.append((png, s_rel, e_rel, res[1]))
 
-        if overlays:
-            cmd = ["ffmpeg", "-y", "-i", t1]
-            fparts = []
-            prev = "[0:v]"
-            for k, (png, s_rel, e_rel, h) in enumerate(overlays, 1):
-                cmd += ["-loop", "1", "-i", png]
-                out_lbl = f"[v{k}]"
-                y_pos = 1920 - h - 170
-                fparts.append(
-                    f"{prev}[{k}:v]overlay=(W-w)/2:{y_pos}:enable='between(t,{s_rel},{e_rel})':shortest=1{out_lbl}"
-                )
-                prev = out_lbl
-            cmd += ["-filter_complex", ";".join(fparts),
-                    "-map", prev, "-map", "0:a?",
-                    "-c:v", "libx264", "-c:a", "copy", t2]
-            r2 = run_cmd(cmd, cwd=work_dir)
-            if r2.returncode != 0:
-                raise RuntimeError(f"فشل الكابشن: {r2.stderr[-400:]}")
-            caption_input = t2
+            if overlays:
+                cmd = ["ffmpeg", "-y", "-i", t1]
+                fparts = []
+                prev = "[0:v]"
+                for k, (png, s_rel, e_rel, h) in enumerate(overlays, 1):
+                    cmd += ["-loop", "1", "-i", png]
+                    out_lbl = f"[v{k}]"
+                    y_pos = 1920 - h - 170
+                    fparts.append(
+                        f"{prev}[{k}:v]overlay=(W-w)/2:{y_pos}:enable='between(t,{s_rel},{e_rel})':shortest=1{out_lbl}"
+                    )
+                    prev = out_lbl
+                cmd += ["-filter_complex", ";".join(fparts),
+                        "-map", prev, "-map", "0:a?",
+                        "-c:v", "libx264", "-c:a", "copy", t2]
+                r2 = run_cmd(cmd, cwd=work_dir, timeout=900)
+                if r2.returncode != 0:
+                    raise RuntimeError(f"فشل الكابشن: {r2.stderr[-400:]}")
+                caption_input = t2
 
-    # ── الخطوة ٣: fade ──
-    r3 = run_cmd(["ffmpeg", "-y", "-i", caption_input,
-                  "-vf", f"fade=t=in:st=0:d={fade_in},fade=t=out:st={fade_out_start}:d={fade_out}",
-                  "-af", f"afade=t=in:st=0:d={fade_in},afade=t=out:st={fade_out_start}:d={fade_out}",
-                  "-c:v", "libx264", "-c:a", "aac", out_name], cwd=work_dir)
+        # ── الخطوة ٣: fade ──
+        r3 = run_cmd(["ffmpeg", "-y", "-i", caption_input,
+                      "-vf", f"fade=t=in:st=0:d={fade_in},fade=t=out:st={fade_out_start}:d={fade_out}",
+                      "-af", f"afade=t=in:st=0:d={fade_in},afade=t=out:st={fade_out_start}:d={fade_out}",
+                      "-c:v", "libx264", "-c:a", "aac", out_name], cwd=work_dir, timeout=900)
+        if r3.returncode != 0:
+            raise RuntimeError(f"فشل الـ fade: {r3.stderr[-300:]}")
+    finally:
+        for f in [t1, t2] + pngs:
+            p = os.path.join(work_dir, f)
+            if os.path.exists(p):
+                os.remove(p)
 
-    for f in (t1, t2):
-        p = os.path.join(work_dir, f)
-        if os.path.exists(p):
-            os.remove(p)
 
-    if r3.returncode != 0:
-        raise RuntimeError(f"فشل الـ fade: {r3.stderr[-300:]}")
+# ══════════════ الجلسات ══════════════
+def session_dir(session_id: str) -> str:
+    if not SESSION_RE.match(session_id or ""):
+        raise HTTPException(status_code=400, detail="معرّف غير صالح")
+    return os.path.join(tempfile.gettempdir(), session_id)
 
 
-# ══════════════ ENDPOINTS ══════════════
+SESSION_EXPIRED_MSG = ("انتهت الجلسة. تُحذف الملفات تلقائياً بعد فترة من الوقت، "
+                       "فارفع الملف من جديد وأعد التحليل.")
+
+
+def save_upload(file: UploadFile, dest: str, limit: int) -> int:
+    """ينسخ الملف على دفعات ويُلغي فور تجاوز الحد."""
+    total = 0
+    with open(dest, "wb") as out:
+        while True:
+            chunk = file.file.read(1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > limit:
+                raise UserError(_too_big_msg(), 413)
+            out.write(chunk)
+    return total
+
+
+# ══════════════ ENDPOINTS (دوال عادية → تعمل في threadpool ولا تجمّد السيرفر) ══════════════
 @app.post("/analyze")
-async def analyze_endpoint(
+def analyze_endpoint(
     file: UploadFile = File(...),
-    groq_key: str = Form(...),
-    or_key: str = Form(...),
     clips_count: int = Form(3),
 ):
+    if not keys_ok():
+        raise HTTPException(status_code=503, detail="الخدمة غير مهيّأة حالياً. تواصل مع الدعم.")
+    clips_count = max(1, min(10, clips_count))
     work_dir = tempfile.mkdtemp(prefix="podlup_")
     try:
-        ext = Path(file.filename).suffix.lower() or ".mp4"
+        ext = Path(file.filename or "").suffix.lower()
+        if not re.fullmatch(r"\.[a-z0-9]{1,5}", ext):
+            ext = ".mp4"
         input_name = f"input{ext}"
-        with open(os.path.join(work_dir, input_name), "wb") as f:
-            shutil.copyfileobj(file.file, f)
+        input_path = os.path.join(work_dir, input_name)
+        save_upload(file, input_path, max_upload_bytes())
 
-        # استخراج صوت مضغوط (يحل مشكلة حد 25MB نهائياً)
+        duration = probe_duration(input_path)
+        if duration > max_duration_sec():
+            raise UserError(f"مدة الملف ({int(duration // 60)} دقيقة) تتجاوز الحد المسموح "
+                            f"({max_duration_sec() // 60} دقيقة).", 413)
+
         audio_name = extract_audio(input_name, work_dir)
-
-        transcript = transcribe(audio_name, groq_key, work_dir)
+        transcript = transcribe(audio_name, work_dir)
         segments = transcript.get("segments", [])
         if not segments:
-            raise RuntimeError("لم يُستخرج أي نص من الملف")
+            raise UserError("لم يُستخرج أي نص من الملف. تأكد أن الصوت واضح.", 422)
 
-        raw_clips = analyze(segments, or_key, clips_count)
+        raw_clips = analyze(segments, clips_count)
+        clips = validate_clips(raw_clips, segments, clips_count)
+        if not clips:
+            raise UserError("لم نتمكن من اختيار مقاطع صالحة من هذه الحلقة. حاول مرة أخرى.", 502)
 
-        seg_by_id = {s["id"]: s for s in segments}
-        all_ids = sorted(seg_by_id.keys())
-        min_dur = 25
-
-        clips = []
-        for c in raw_clips:
-            ss = seg_by_id.get(c["start_id"])
-            es = seg_by_id.get(c["end_id"])
-            if not ss or not es:
-                continue
-            sid, eid = c["start_id"], c["end_id"]
-            dur = es["end"] - ss["start"]
-            while dur < min_dur:
-                nxt = next((i for i in all_ids if i > eid), None)
-                prv = next((i for i in reversed(all_ids) if i < sid), None)
-                if nxt:
-                    eid = nxt; es = seg_by_id[eid]
-                elif prv:
-                    sid = prv; ss = seg_by_id[sid]
-                else:
-                    break
-                dur = es["end"] - ss["start"]
-
-            clip_segments = [s for s in segments if sid <= s["id"] <= eid]
-            after_ids = [i for i in all_ids if i > eid][:8]
-            after_segments = [seg_by_id[i] for i in after_ids]
-
-            clips.append({
-                "title": c["title"],
-                "caption": c["caption"],
-                "score": c["score"],
-                "reason": c.get("reason", ""),
-                "start": round(ss["start"], 2),
-                "end": round(es["end"], 2),
-                "duration": round(es["end"] - ss["start"]),
-                "start_id": sid,
-                "end_id": eid,
-                "clip_segments": [{"id": s["id"], "text": s["text"].strip(), "start": s["start"], "end": s["end"]} for s in clip_segments],
-                "after_segments": [{"id": s["id"], "text": s["text"].strip(), "start": s["start"], "end": s["end"]} for s in after_segments],
-            })
-
-        meta = {"input_name": input_name, "clips": clips, "segments": segments, "or_key": or_key}
+        meta = {"input_name": input_name, "clips": clips, "segments": segments}
         with open(os.path.join(work_dir, "meta.json"), "w") as f:
             json.dump(meta, f, ensure_ascii=False)
 
@@ -377,28 +650,31 @@ async def analyze_endpoint(
             "clips": clips,
             "segments_count": len(segments),
         })
-    except Exception as e:
+    except UserError as e:
         shutil.rmtree(work_dir, ignore_errors=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=e.status, detail=str(e))
+    except Exception:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        log.exception("فشل /analyze")
+        raise HTTPException(status_code=500, detail="حدث خطأ غير متوقع أثناء التحليل. حاول مرة أخرى.")
 
 
 @app.get("/download/{session_id}/{clip_index}")
-async def download_endpoint(session_id: str, clip_index: int,
-                            caption: str = "none", end_id: int = -1):
-    if "/" in session_id or ".." in session_id:
-        raise HTTPException(status_code=400, detail="معرّف غير صالح")
-
-    work_dir = os.path.join(tempfile.gettempdir(), session_id)
+def download_endpoint(session_id: str, clip_index: int,
+                      caption: str = "none", end_id: int = -1):
+    if caption not in CAPTION_MODES:
+        raise HTTPException(status_code=400, detail="وضع الكابشن غير صالح")
+    work_dir = session_dir(session_id)
     meta_path = os.path.join(work_dir, "meta.json")
     if not os.path.exists(meta_path):
-        raise HTTPException(status_code=404, detail="الجلسة منتهية — أعد التحليل")
+        raise HTTPException(status_code=404, detail=SESSION_EXPIRED_MSG)
 
     with open(meta_path) as f:
         meta = json.load(f)
+    os.utime(work_dir, None)  # تمديد عمر الجلسة بعد الاستخدام
 
     clips = meta["clips"]
     segments = meta["segments"]
-    or_key = meta.get("or_key", "")
     if not (0 <= clip_index < len(clips)):
         raise HTTPException(status_code=400, detail="رقم المقطع غير صحيح")
 
@@ -413,11 +689,19 @@ async def download_endpoint(session_id: str, clip_index: int,
     out_path = os.path.join(work_dir, out_name)
 
     if not os.path.exists(out_path):
+        tmp_name = f"{uuid.uuid4().hex[:8]}_{out_name}"
         try:
-            cut_clip(meta["input_name"], clip["start"], end_time, out_name,
-                     caption, segments, or_key, work_dir)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            cut_clip(meta["input_name"], clip["start"], end_time, tmp_name,
+                     caption, segments, work_dir)
+            os.replace(os.path.join(work_dir, tmp_name), out_path)
+        except UserError as e:
+            raise HTTPException(status_code=e.status, detail=str(e))
+        except Exception:
+            log.exception("فشل رندر المقطع")
+            tmp = os.path.join(work_dir, tmp_name)
+            if os.path.exists(tmp):
+                os.remove(tmp)
+            raise HTTPException(status_code=500, detail="تعذّر تجهيز المقطع. حاول مرة أخرى.")
 
     safe_title = "".join(ch for ch in clip["title"] if ch.isalnum() or ch in " _-")[:40].strip()
     return FileResponse(out_path, media_type="video/mp4",
@@ -425,9 +709,10 @@ async def download_endpoint(session_id: str, clip_index: int,
 
 
 @app.get("/health")
-async def health():
+def health():
     return {"status": "ok", "version": VERSION,
-            "font": any(os.path.exists(p) for p in FONT_CANDIDATES)}
+            "font": any(os.path.exists(p) for p in FONT_CANDIDATES),
+            "keys": keys_ok()}
 
 
 # ══════════════ الواجهة (مدمجة — لا ملف HTML منفصل) ══════════════
@@ -459,9 +744,6 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;padding:0 clamp(
 .field-label{font-size:12px;font-weight:700;color:var(--forest-mid);margin-bottom:7px;display:block;}
 .field-input{width:100%;background:var(--ivory);border:1.5px solid var(--border-strong);border-radius:12px;padding:12px 16px;color:var(--forest);font-family:'Tajawal',sans-serif;font-size:15px;outline:none;transition:border-color .2s;direction:ltr;text-align:left;}
 .field-input:focus{border-color:var(--orange);}
-.key-row{display:flex;gap:8px;margin-bottom:16px;}
-.key-row .field-input{flex:1;}
-.key-eye{background:var(--ivory);border:1.5px solid var(--border-strong);border-radius:12px;padding:0 14px;cursor:pointer;color:var(--forest-light);font-size:15px;display:flex;align-items:center;}
 .upload-zone{border:2px dashed var(--border-strong);border-radius:14px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .25s;position:relative;background:var(--ivory);}
 .upload-zone:hover,.upload-zone.drag{border-color:var(--orange);background:var(--orange-pale);}
 .upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
@@ -547,19 +829,6 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;padding:0 clamp(
       </div>
       <div class="upload-name" id="uploadName"></div>
     </div>
-    <div style="margin-top:24px;">
-      <div class="card-label">المفاتيح</div>
-      <label class="field-label">مفتاح Groq</label>
-      <div class="key-row">
-        <input type="password" id="groqKey" class="field-input" placeholder="gsk_...">
-        <button class="key-eye" onclick="toggleVis('groqKey')">👁</button>
-      </div>
-      <label class="field-label">مفتاح OpenRouter</label>
-      <div class="key-row">
-        <input type="password" id="orKey" class="field-input" placeholder="sk-or-v1-...">
-        <button class="key-eye" onclick="toggleVis('orKey')">👁</button>
-      </div>
-    </div>
     <div class="card-label" style="margin-top:4px;">الإعدادات</div>
     <div class="settings-row">
       <div>
@@ -597,7 +866,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;height:64px;padding:0 clamp(
     <div id="clipsContainer"></div>
   </div>
 
-  <div class="footer-note">مفاتيحك تُرسل مباشرة لـ Groq وOpenRouter ولا تُحفظ · podlup.com</div>
+  <div class="footer-note">podlup.com</div>
 </div>
 
 <script>
@@ -613,7 +882,7 @@ const uz=document.getElementById('uploadZone'),fi=document.getElementById('fileI
 uz.addEventListener('drop',e=>{if(e.dataTransfer.files[0]){fi.files=e.dataTransfer.files;un.textContent='✓ '+e.dataTransfer.files[0].name;}});
 fi.addEventListener('change',()=>{if(fi.files[0])un.textContent='✓ '+fi.files[0].name;});
 
-function toggleVis(id){const el=document.getElementById(id);el.type=el.type==='password'?'text':'password';}
+function escapeHtml(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function fmt(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');}
 function setStep(n,state,label){
   const num=document.getElementById('s'+n),txt=document.getElementById('s'+n+'t');
@@ -692,12 +961,12 @@ function renderClips(clips){
   clips.forEach((c,i)=>{
     captionMode[i]='none';selectedEndId[i]=-1;
     const allSegs=[...(c.clip_segments||[]),...(c.after_segments||[])];
-    const defEnd=c.end_id;
+    const defEnd=Number(c.end_id);
     let segsHtml='';
     if(allSegs.length){
       segsHtml=allSegs.map(s=>{
         const isEnd=s.id===defEnd, isAfter=s.id>defEnd;
-        return '<div class="seg-line'+(isEnd?' is-end':'')+(isAfter?' after-end':'')+'" data-seg-id="'+s.id+'" data-clip-start="'+c.start+'" onclick="selectEndSeg('+i+','+s.id+','+s.end+',this)"><span class="seg-num">['+s.id+']</span><span>'+s.text+'</span></div>';
+        return '<div class="seg-line'+(isEnd?' is-end':'')+(isAfter?' after-end':'')+'" data-seg-id="'+Number(s.id)+'" data-clip-start="'+Number(c.start)+'" onclick="selectEndSeg('+i+','+Number(s.id)+','+Number(s.end)+',this)"><span class="seg-num">['+Number(s.id)+']</span><span>'+escapeHtml(s.text)+'</span></div>';
       }).join('');
     }
     const editorHtml=allSegs.length?
@@ -711,12 +980,12 @@ function renderClips(clips){
     div.className='clip-card';
     div.innerHTML=
       '<div class="clip-meta">'+
-        '<span class="clip-time" id="clip-time-'+i+'">'+fmt(c.start)+' ← '+fmt(c.end)+' · '+c.duration+'ث</span>'+
-        '<span class="clip-score">🔥 '+c.score+'</span>'+
+        '<span class="clip-time" id="clip-time-'+i+'">'+fmt(Number(c.start))+' ← '+fmt(Number(c.end))+' · '+Number(c.duration)+'ث</span>'+
+        '<span class="clip-score">🔥 '+Number(c.score)+'</span>'+
       '</div>'+
-      '<div class="clip-title">'+c.title+'</div>'+
-      '<div class="clip-caption">'+c.caption+'</div>'+
-      (c.reason?'<div class="clip-reason">'+c.reason+'</div>':'')+
+      '<div class="clip-title">'+escapeHtml(c.title)+'</div>'+
+      '<div class="clip-caption">'+escapeHtml(c.caption)+'</div>'+
+      (c.reason?'<div class="clip-reason">'+escapeHtml(c.reason)+'</div>':'')+
       editorHtml+
       '<div class="card-label" style="margin-top:4px;">الكابشن</div>'+
       '<div class="caption-opts">'+
@@ -725,19 +994,15 @@ function renderClips(clips){
         '<div class="cap-opt" id="cap-'+i+'-focus" onclick="selectCaption('+i+',\'focus\')"><span class="cap-opt-title">Caption Focus</span><span class="cap-opt-sub">كلمات مميزة</span></div>'+
       '</div>'+
       '<button class="btn-dl" id="dl-btn-'+i+'" onclick="downloadClip('+i+',this)">⬇ تحميل المقطع</button>'+
-      '<button class="btn-copy" onclick="copyCaption(this.dataset.cap,this)" data-cap="'+c.caption.replace(/"/g,'&quot;')+'">💬 نسخ الكابشن</button>';
+      '<button class="btn-copy" onclick="copyCaption(this.dataset.cap,this)" data-cap="'+escapeHtml(c.caption)+'">💬 نسخ الكابشن</button>';
     container.appendChild(div);
   });
 }
 async function startAnalysis(){
   const file=fi.files[0];
-  const groqKey=document.getElementById('groqKey').value.trim();
-  const orKey=document.getElementById('orKey').value.trim();
   const count=document.getElementById('clipsCount').value;
   document.getElementById('errorBox').classList.remove('visible');
   if(!file)return showError('الرجاء رفع ملف صوتي أو فيديو.');
-  if(!groqKey)return showError('الرجاء إدخال مفتاح Groq.');
-  if(!orKey)return showError('الرجاء إدخال مفتاح OpenRouter.');
 
   document.getElementById('inputCard').style.display='none';
   document.getElementById('progressCard').classList.add('visible');
@@ -748,8 +1013,6 @@ async function startAnalysis(){
   try{
     const form=new FormData();
     form.append('file',file,file.name);
-    form.append('groq_key',groqKey);
-    form.append('or_key',orKey);
     form.append('clips_count',count);
     const res=await fetch(API+'/analyze',{method:'POST',body:form});
     if(!res.ok){const e=await res.json().catch(()=>({detail:'خطأ في التحليل'}));throw new Error(e.detail);}
